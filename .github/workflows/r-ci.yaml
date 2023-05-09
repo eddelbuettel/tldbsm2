@@ -1,4 +1,4 @@
-name: TileDB-SOMA R CI
+name: r-ci
 
 on:
   pull_request:
@@ -6,7 +6,7 @@ on:
       - "apis/python/**"
       - ".pre-commit-config.yaml"
   push:
-    branches: [main]
+    branches: [main, master]
 
 env:
   COVERAGE_FLAGS: "r"
