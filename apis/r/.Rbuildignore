@@ -1,0 +1,30 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^\.travis\.yml$
+^_pgkdown.yml
+^tiledbsoma_.*\.tar\.gz$
+^docs
+^_pkgdown.yml$
+^\.editorconfig$
+^test$
+\.clang-format$
+^src/CMakeLists.txt$
+^\.github$
+^prune_libtiledbsoma_sources.sh$
+^dev$
+^local
+^copy_source.sh$
+
+# build artifacts with libtiledbsoma
+src/include
+src/libtiledbsoma
+tiledbsoma/libtiledbsoma.tar.gz.current
+tiledb.tar.gz
+tiledbsoma.tar.gz
+
+# vscode
+^\.vscode$
+^\.devcontainer$
+^data-raw$
+^doc$
+^Meta$

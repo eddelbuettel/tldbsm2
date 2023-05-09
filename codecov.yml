@@ -1,0 +1,6 @@
+coverage:
+  range: "90...95"
+
+ignore:
+  - "apis/r/inst/tiledb/"
+  - "apis/python/devtools/"
