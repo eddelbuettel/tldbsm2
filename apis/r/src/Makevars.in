@@ -16,7 +16,7 @@ all: $(SHLIB)
 	if [ `uname -s` = 'Darwin' ] && [ -f tiledbsoma.so ]; then \
 	    if [ -f ../inst/tiledb/lib/libtiledb.dylib ] ; then \
 	        install_name_tool -change libz.1.dylib @rpath/libz.1.dylib ../inst/tiledb/lib/libtiledb.dylib; \
+	        install_name_tool -add_rpath @loader_path/../tiledb/lib tiledbsoma.so; \
+	        install_name_tool -add_rpath @loader_path/../tiledbsoma/lib tiledbsoma.so; \
 	    fi; \
-	    install_name_tool -add_rpath @loader_path/../tiledb/lib tiledbsoma.so; \
-	    install_name_tool -add_rpath @loader_path/../tiledbsoma/lib tiledbsoma.so; \
 	fi
