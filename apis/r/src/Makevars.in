@@ -19,6 +19,4 @@ all: $(SHLIB)
 	    fi; \
 	    install_name_tool -add_rpath @loader_path/../tiledb/lib tiledbsoma.so; \
 	    install_name_tool -add_rpath @loader_path/../tiledbsoma/lib tiledbsoma.so; \
-	    install_name_tool -add_rpath @loader_path/../inst/tiledb/lib tiledbsoma.so; \
-	    install_name_tool -add_rpath @loader_path/../inst/tiledbsoma/lib tiledbsoma.so; \
 	fi
