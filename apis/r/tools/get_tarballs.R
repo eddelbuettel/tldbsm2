@@ -23,7 +23,6 @@ if (any(Sys.which(c("cmake", "git")) == ""))
 
 tarball <- "tiledb.tar.gz"
 if (!file.exists(tarball)) download.file(url, tarball, quiet=TRUE)
-if (!dir.exists("tiledb")) untar(tarball, exdir="tiledb")
 if (!dir.exists("inst/tiledb")) untar(tarball, exdir="inst/tiledb")
 
 soma_url <- "https://github.com/single-cell-data/TileDB-SOMA/archive/refs/tags/1.2.3.tar.gz"
