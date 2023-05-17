@@ -24,10 +24,13 @@ jobs:
       vmImage: $(imageName)
 
     steps:
-      - script: echo Hello, world!
+      - script: echo "Hello, world on $(imageName) $(CMAKE_OSX_ARCHITECTURES)"
         displayName: 'Run a one-line script'
 
-      - script: |
-          echo Add other tasks to build, test, and deploy your project.
-          echo See https://aka.ms/yaml
-        displayName: 'Run a multi-line script'
+      - bash: |
+          brew install pkg-config
+        displayName: "Add pkg-config" 
+        condition: eq(variables['Agent.OS'], 'Darwin')
+
+      - bash: cmake --version
+        displayName: "Check cmake"
