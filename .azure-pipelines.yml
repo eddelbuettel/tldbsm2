@@ -34,3 +34,20 @@ jobs:
 
       - bash: cmake --version
         displayName: "Check cmake"
+
+      - bash: |
+          set -xe pipefail
+          #
+          cd libtiledbsoma
+          #
+          cwd=`pwd`
+          #
+          test -d build && rm -rf build
+          mkdir build
+          cd build
+          #
+          cmake -DTILEDBSOMA_BUILD_CLI=OFF -DTILEDBSOMA_ENABLE_TESTING=OFF -DOVERRIDE_INSTALL_PREFIX=OFF -DCMAKE_INSTALL_PREFIX=$(cwd)/dist -DCMAKE_OSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES} ..
+          #
+          make
+          make install-libtiledbsoma
+        displayName: "Build"
