@@ -10,7 +10,7 @@ variables:
 - name: TILEDBSOMA_BUILD
   value: "$(Build.Repository.Localpath)/tiledb_build"
 - name: TILEDBSOMA_INSTALL
-  value: "$(Pipeline.Workspace)/.libtiledb_dist/$(TILEDBSOMA_SHA)"
+  value: "$(Pipeline.Workspace)/.tiledbsoma_dist/$(TILEDBSOMA_SHA)"
 
 jobs:
   - job: build
@@ -53,7 +53,14 @@ jobs:
           mkdir -p $TILEDBSOMA_BUILD
           cd $TILEDBSOMA_BUILD
           #
-          cmake -B $TILEDBSOMA_BUILD -S $cwd -DTILEDBSOMA_BUILD_CLI=OFF -DTILEDBSOMA_ENABLE_TESTING=OFF -DOVERRIDE_INSTALL_PREFIX=OFF -DCMAKE_INSTALL_PREFIX=${cwd}/dist -DCMAKE_OSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES} 
+          cmake -B $TILEDBSOMA_BUILD -S $cwd \
+          	-DTILEDBSOMA_BUILD_CLI=OFF \
+                -DTILEDBSOMA_ENABLE_TESTING=OFF \
+                -DDOWNLOAD_TILEDB_PREBUILT=OFF \
+                -DFORCE_BUILD_TILEDB=ON \
+                -DOVERRIDE_INSTALL_PREFIX=OFF \
+                -DCMAKE_INSTALL_PREFIX=${cwd}/dist \
+                -DCMAKE_OSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES} 
           #
           cmake --build $TILEDBSOMA_BUILD --config Release -j4
           cmake --build $TILEDBSOMA_BUILD --target install-libtiledbsoma --config Release
