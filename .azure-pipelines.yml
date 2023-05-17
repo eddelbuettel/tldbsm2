@@ -1,19 +1,33 @@
-# Starter pipeline
-# Start with a minimal pipeline that you can customize to build and deploy your code.
-# Add steps that build, run tests, deploy, and more:
-# https://aka.ms/yaml
+# Evolved from starter example and setup to debug release builds
+# Docs at https://aka.ms/yaml
 
 trigger:
 - master
 
-pool:
-  vmImage: ubuntu-latest
+jobs:
+  - job: build
+    strategy:
+      matrix:
+        macos_x86:
+          imageName: "macOS-11"
+          CMAKE_OSX_ARCHITECTURES: "x86_64"
+          MACOSX_DEPLOYMENT_TARGET: 10.14
+        macos_arm:
+          imageName: "macOS-11"
+          CMAKE_OSX_ARCHITECTURES: "arm64"
+          MACOSX_DEPLOYMENT_TARGET: 11
+        linux_x86:
+          imageName: "ubuntu-latest"
+          CMAKE_OSX_ARCHITECTURES: ""
+          MACOSX_DEPLOYMENT_TARGET: ""
+    pool:
+      vmImage: $(imageName)
 
-steps:
-- script: echo Hello, world!
-  displayName: 'Run a one-line script'
+    steps:
+      - script: echo Hello, world!
+        displayName: 'Run a one-line script'
 
-- script: |
-    echo Add other tasks to build, test, and deploy your project.
-    echo See https://aka.ms/yaml
-  displayName: 'Run a multi-line script'
+      - script: |
+          echo Add other tasks to build, test, and deploy your project.
+          echo See https://aka.ms/yaml
+        displayName: 'Run a multi-line script'
