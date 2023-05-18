@@ -32,7 +32,7 @@ jobs:
       vmImage: $(imageName)
 
     steps:
-      - script: echo "Hello, world on $(imageName) $(CMAKE_OSX_ARCHITECTURES) $(TILEDBSOMA_BUILD) $(TILEDBSOMA_INSTALL)"
+      - script: echo "Hello, world on $imageName $CMAKE_OSX_ARCHITECTURES $TILEDBSOMA_BUILD $TILEDBSOMA_INSTALL"
         displayName: 'Echo variables'
 
       - bash: |
@@ -60,7 +60,7 @@ jobs:
           	-DTILEDBSOMA_ENABLE_TESTING=OFF \
                 -DOVERRIDE_INSTALL_PREFIX=OFF \
                 -DCMAKE_INSTALL_PREFIX=${cwd}/dist \
-                -DCMAKE_OSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES} 
+                -DCMAKE_OSX_ARCHITECTURES=$CMAKE_OSX_ARCHITECTURES
           #
           cmake --build $TILEDBSOMA_BUILD --config Release -j4
           cmake --build $TILEDBSOMA_BUILD --target install-libtiledbsoma --config Release
