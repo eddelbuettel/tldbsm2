@@ -20,10 +20,10 @@ jobs:
           imageName: "macOS-11"
           CMAKE_OSX_ARCHITECTURES: "x86_64"
           MACOSX_DEPLOYMENT_TARGET: 10.14
-        #macos_arm:
-        #  imageName: "macOS-11"
-        #  CMAKE_OSX_ARCHITECTURES: "arm64"
-        #  MACOSX_DEPLOYMENT_TARGET: 11
+        macos_arm:
+          imageName: "macOS-11"
+          CMAKE_OSX_ARCHITECTURES: "arm64"
+          MACOSX_DEPLOYMENT_TARGET: 11
         linux_x86:
           imageName: "ubuntu-latest"
           CMAKE_OSX_ARCHITECTURES: ""
