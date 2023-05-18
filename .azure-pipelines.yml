@@ -10,6 +10,8 @@ variables:
   value: "dev"
 - name: TILEDBSOMA_BUILD
   value: "$(Build.Repository.Localpath)/tiledb_build"
+- name: TILEDBSOMA_SOURCE
+  value: "$(Build.Repository.Localpath)/libtiledbsoma"
 - name: TILEDBSOMA_INSTALL
   value: "$(Pipeline.Workspace)/.tiledbsoma_dist/$(TILEDBSOMA_SHA)"
 
@@ -55,13 +57,12 @@ jobs:
           #
           cd libtiledbsoma
           #
-          cwd=`pwd`
-          #
           mkdir -p $TILEDBSOMA_BUILD
           cd $TILEDBSOMA_BUILD
           #
           #
-          cmake -B $TILEDBSOMA_BUILD -S $cwd \
+          cmake -B $TILEDBSOMA_BUILD \
+                -S $TILEDBSOMA_SOURCE \
           	-DDOWNLOAD_TILEDB_PREBUILT=ON \
           	-DTILEDBSOMA_BUILD_CLI=OFF \
           	-DTILEDBSOMA_ENABLE_TESTING=OFF \
@@ -73,6 +74,9 @@ jobs:
           cmake --build $TILEDBSOMA_BUILD --target install-libtiledbsoma --config Release
         displayName: "Build"
 
+      - bash: ls -lR $TILEDBSOMA_INSTALL
+        displayName: "Inspect build output"
+        
       - task: ArchiveFiles@2
         displayName: "Archive Files"
         inputs:
