@@ -76,17 +76,17 @@ jobs:
       - task: ArchiveFiles@2
         displayName: "Archive Files"
         inputs:
-          rootFolderOrFile: '$(Build.Repository.LocalPath)'
+          rootFolderOrFile: $(TILEDBSOMA_INSTALL)
           includeRootFolder: false
           archiveType: 'tar' # Options: zip, 7z, tar, wim
           tarCompression: 'gz' # Optional. Options: gz, bz2, xz, none
-          archiveFile: $(Build.ArtifactStagingDirectory)/tiledbsoma-$(ARTIFACT_OS)-$(ARTIFACT_ARCH)-build-dir.tar.gz
+          archiveFile: $(Build.ArtifactStagingDirectory)/tiledbsoma-$(ARTIFACT_OS)-$(ARTIFACT_ARCH)-$(TILEDBSOMA_SHA).tar.gz
           replaceExistingArchive: true
           verbose: true # Optional
            
       - task: PublishBuildArtifacts@1
         displayName: "Publish Files"
         inputs:
-          pathToPublish: '$(Build.ArtifactStagingDirectory)/tiledbsoma-$(ARTIFACT_OS)-$(ARTIFACT_ARCH)-build-dir.tar.gz'
+          pathToPublish: '$(Build.ArtifactStagingDirectory)/tiledbsoma-$(ARTIFACT_OS)-$(ARTIFACT_ARCH)-$(TILEDBSOMA_SHA).tar.gz'
           artifactName: 'build-dirs'
         condition: succeeded()

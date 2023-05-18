@@ -7,7 +7,7 @@ on:
   #    - ".pre-commit-config.yaml"
   #push:
   #  branches: [main, master]
-  releases:
+  release:
 
 env:
   COVERAGE_FLAGS: "r"
