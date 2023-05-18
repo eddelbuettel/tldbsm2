@@ -66,7 +66,7 @@ jobs:
           	-DTILEDBSOMA_BUILD_CLI=OFF \
           	-DTILEDBSOMA_ENABLE_TESTING=OFF \
                 -DOVERRIDE_INSTALL_PREFIX=OFF \
-                -DCMAKE_INSTALL_PREFIX=${cwd}/dist \
+                -DCMAKE_INSTALL_PREFIX=$TILEDBSOMA_INSTALL \
                 -DCMAKE_OSX_ARCHITECTURES=$CMAKE_OSX_ARCHITECTURES
           #
           cmake --build $TILEDBSOMA_BUILD --config Release -j4
