@@ -72,6 +72,9 @@ jobs:
           #
           cmake --build $TILEDBSOMA_BUILD --config Release -j4
           cmake --build $TILEDBSOMA_BUILD --target install-libtiledbsoma --config Release
+          #
+          # this should not be needed -- the tiledb core library gets 'co-installed'
+          rm -vf $TILEDBSOMA_INSTALL/lib/libtiledb.{so,dylib}*
         displayName: "Build"
 
       - bash: ls -lR $TILEDBSOMA_INSTALL
