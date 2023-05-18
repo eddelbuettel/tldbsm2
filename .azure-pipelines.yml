@@ -1,4 +1,5 @@
 # Evolved from starter example and setup to debug release builds
+# Also leans heavily on Azure scripts for tiledb and tiledb-py
 # Docs at https://aka.ms/yaml
 
 trigger:
@@ -20,19 +21,25 @@ jobs:
           imageName: "macOS-11"
           CMAKE_OSX_ARCHITECTURES: "x86_64"
           MACOSX_DEPLOYMENT_TARGET: 10.14
+          ARTIFACT_OS: 'macos'
+          ARTIFACT_ARCH: 'x86_64'
         macos_arm:
           imageName: "macOS-11"
           CMAKE_OSX_ARCHITECTURES: "arm64"
-          MACOSX_DEPLOYMENT_TARGET: 11
+          MACOSX_DEPLOYMENT_TARGET: 11 
+          ARTIFACT_OS: 'macos'
+          ARTIFACT_ARCH: 'arm64'
         linux_x86:
           imageName: "ubuntu-latest"
           CMAKE_OSX_ARCHITECTURES: ""
           MACOSX_DEPLOYMENT_TARGET: ""
+          ARTIFACT_OS: 'linux'
+          ARTIFACT_ARCH: "x86_64"
     pool:
       vmImage: $(imageName)
 
     steps:
-      - script: echo "Hello, world on $imageName $CMAKE_OSX_ARCHITECTURES $TILEDBSOMA_BUILD $TILEDBSOMA_INSTALL"
+      - script: echo "Vars are $imageName $CMAKE_OSX_ARCHITECTURES $TILEDBSOMA_BUILD $TILEDBSOMA_INSTALL"
         displayName: 'Echo variables'
 
       - bash: |
@@ -65,3 +72,21 @@ jobs:
           cmake --build $TILEDBSOMA_BUILD --config Release -j4
           cmake --build $TILEDBSOMA_BUILD --target install-libtiledbsoma --config Release
         displayName: "Build"
+
+      - task: ArchiveFiles@2
+        displayName: "Archive Files"
+        inputs:
+          rootFolderOrFile: '$(Build.Repository.LocalPath)'
+          includeRootFolder: false
+          archiveType: 'tar' # Options: zip, 7z, tar, wim
+          tarCompression: 'gz' # Optional. Options: gz, bz2, xz, none
+          archiveFile: $(Build.ArtifactStagingDirectory)/tiledbsoma-$(ARTIFACT_OS)-$(ARTIFACT_ARCH)-build-dir.tar.gz
+          replaceExistingArchive: true
+          verbose: true # Optional
+           
+      - task: PublishBuildArtifacts@1
+        displayName: "Publish Files"
+        inputs:
+          pathToPublish: '$(Build.ArtifactStagingDirectory)/tiledbsoma-$(ARTIFACT_OS)-$(ARTIFACT_ARCH)-build-dir.tar.gz'
+          artifactName: 'build-dirs'
+        condition: succeeded()
