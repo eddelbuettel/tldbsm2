@@ -1,6 +1,7 @@
 # Evolved from starter example and setup to debug release builds
 # Also leans heavily on Azure scripts for tiledb and tiledb-py
 # Docs at https://aka.ms/yaml
+# TODO: Rewrite for GH Actions
 
 trigger:
 - master
