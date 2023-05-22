@@ -21,7 +21,8 @@ jobs:
     strategy:
       matrix:
         #considering https://stackoverflow.com/questions/65035256/how-to-access-matrix-variables-in-github-actions
-        environ: [macos_x86, macos_arm, linux]
+        #environ: [macos_x86, macos_arm, linux]
+        environ: [linux]
         include:
           - environ: 'macos_x86'
             imageName: "macOS-11"
@@ -53,6 +54,6 @@ jobs:
               echo "Vars are "
               echo "  image   ${{ matrix.imageName }}"
               echo "  osxarch ${{ matrix.CMAKE_OSX_ARCHITECTURES }}"
-              echo "  build   ${{ matrix.TILEDBSOMA_BUILD }}"
-              echo "  install ${{ matrix.TILEDBSOMA_INSTALL }}"
+              echo "  build   ${{ env.TILEDBSOMA_BUILD }}"
+              echo "  install ${{ env.TILEDBSOMA_INSTALL }}"
 
