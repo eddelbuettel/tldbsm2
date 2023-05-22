@@ -5,9 +5,9 @@ on:
   #  paths-ignore:
   #    - "apis/python/**"
   #    - ".pre-commit-config.yaml"
-  #push:
-  #  branches: [main, master]
-  release:
+  push:
+    branches: [main, master]
+  #release:
 
 env:
   COVERAGE_FLAGS: "r"
@@ -18,8 +18,15 @@ jobs:
     strategy:
       matrix:
         include:
-          - { os: ubuntu-latest }
-          - { os: macOS-latest }
+          - name: linux
+            os: ubuntu-latest
+            covr: 'no'
+          #- name: macos
+          #  os: macOS-latest
+          #  covr: 'no'
+          - name: coverage
+            os: ubuntu-latest
+            covr: 'yes'
 
     runs-on: ${{ matrix.os }}
 
@@ -49,12 +56,13 @@ jobs:
       #  run: sudo ldconfig
         
       - name: Test
+        if: ${{ matrix.covr == 'no' }}
         run: cd apis/r && tools/r-ci.sh run_tests
 
       #- name: View Install Output
       #  run: cat $HOME/work/TileDB-SOMA/TileDB-SOMA/apis/r/tiledbsoma.Rcheck/00install.out
       #  if: failure()
 
-      #- name: Coverage
-      #  if: ${{ matrix.os == 'ubuntu-latest' }}
-      #  run: cd apis/r && tools/r-ci.sh coverage
+      - name: Coverage
+        if: ${{ matrix.os == 'ubuntu-latest' && matrix.covr == 'yes' }}
+        run: cd apis/r && tools/r-ci.sh coverage
