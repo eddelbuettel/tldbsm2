@@ -87,3 +87,12 @@ jobs:
               #
               # this should not be needed -- the tiledb core library gets 'co-installed'
               rm -vf ${{ env.TILEDBSOMA_INSTALL }}/lib/libtiledb.{so,dylib}*
+
+          - name: "Inspect installation output"
+            run: ls -lR ${{ env.TILEDBSOMA_INSTALL }}
+
+          - uses: actions/upload-artifact@v3
+            with:
+              name: "Artifact"
+              path: ${{ env.TILEDBSOMA_INSTALL }}
+              
