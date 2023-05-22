@@ -94,5 +94,5 @@ jobs:
           - uses: actions/upload-artifact@v3
             with:
               name: "Artifact"
-              path: ${{ env.TILEDBSOMA_INSTALL }}
-              
+              ## in '${{ env.TILEDBSOMA_INSTALL }}' the embedded TILEDBSOMA_SHA does not expand
+              path: ${{ github.workspace }}/.tiledbsoma_dist/${{ env.TILEDBSOMA_SHA }}
