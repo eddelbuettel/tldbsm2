@@ -21,8 +21,7 @@ jobs:
     strategy:
       matrix:
         #considering https://stackoverflow.com/questions/65035256/how-to-access-matrix-variables-in-github-actions
-        #environ: [macos_x86, macos_arm, linux]
-        environ: [linux]
+        environ: [macos_x86, macos_arm, linux]
         include:
           - environ: 'macos_x86'
             imageName: "macOS-11"
@@ -49,7 +48,7 @@ jobs:
 
           - uses: actions/checkout@v3
  
-          - name: 'Echo variables'
+          - name: "Echo variables"
             run: |
               echo "Vars are "
               echo "  image   ${{ matrix.imageName }}"
@@ -57,3 +56,9 @@ jobs:
               echo "  build   ${{ env.TILEDBSOMA_BUILD }}"
               echo "  install ${{ env.TILEDBSOMA_INSTALL }}"
 
+          - name: "Add pkg-config"
+            run: brew install pkg-config
+            if: ${{ matrix.ARTIFACT_OS == "macos" }}
+
+          - name: "Check cmake"
+            run: cmake --version
