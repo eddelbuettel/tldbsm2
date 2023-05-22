@@ -91,8 +91,10 @@ jobs:
           - name: "Inspect installation output"
             run: ls -lR ${{ env.TILEDBSOMA_INSTALL }}
 
+          - name: "Archive files"
+            run: tar -cvfz libtiledbsoma-${{ matrix.ARTIFACT_OS }}-${{ matrix.ARTIFACT_ARCH }}-${{ env.TILEDBSOMA_SHA }}.tar.gz  ${{ env.TILEDBSOMA_INSTALL }}
+            
           - uses: actions/upload-artifact@v3
             with:
-              name: "Artifact"
-              ## in '${{ env.TILEDBSOMA_INSTALL }}' the embedded TILEDBSOMA_SHA does not expand
-              path: ${{ github.workspace }}/.tiledbsoma_dist/${{ env.TILEDBSOMA_SHA }}
+              name: libtiledbsoma-${{ matrix.ARTIFACT_OS }}-${{ matrix.ARTIFACT_ARCH }}-${{ env.TILEDBSOMA_SHA }}.tar.gz
+              path: libtiledbsoma-${{ matrix.ARTIFACT_OS }}-${{ matrix.ARTIFACT_ARCH }}-${{ env.TILEDBSOMA_SHA }}.tar.gz
