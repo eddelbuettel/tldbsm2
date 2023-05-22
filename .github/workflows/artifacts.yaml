@@ -58,7 +58,7 @@ jobs:
 
           - name: "Add pkg-config"
             run: brew install pkg-config
-            if: ${{ matrix.ARTIFACT_OS == "macos" }}
+            if: ${{ matrix.ARTIFACT_OS == 'macos' }}
 
           - name: "Check cmake"
             run: cmake --version
