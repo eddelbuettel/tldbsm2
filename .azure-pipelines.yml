@@ -4,7 +4,8 @@
 # TODO: Rewrite for GH Actions
 
 trigger:
-- master
+- non-existing-dev-branch-so-this-is-turned-off  
+#- master
 
 variables:
 - name: TILEDBSOMA_SHA
