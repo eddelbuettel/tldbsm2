@@ -62,3 +62,28 @@ jobs:
 
           - name: "Check cmake"
             run: cmake --version
+
+          - name: "Build"
+            run: |
+              set -xe pipefail
+              #
+              cd libtiledbsoma
+              #
+              mkdir -p ${{ env.TILEDBSOMA_BUILD }}
+              cd ${{ env.TILEDBSOMA_BUILD }}
+              #
+              #
+              cmake -B ${{ env.TILEDBSOMA_BUILD }} \
+                    -S ${{ env.TILEDBSOMA_SOURCE }} \
+               	    -DDOWNLOAD_TILEDB_PREBUILT=ON \
+              	    -DTILEDBSOMA_BUILD_CLI=OFF \
+              	    -DTILEDBSOMA_ENABLE_TESTING=OFF \
+                    -DOVERRIDE_INSTALL_PREFIX=OFF \
+                    -DCMAKE_INSTALL_PREFIX=${{ env.TILEDBSOMA_INSTALL }} \
+                    -DCMAKE_OSX_ARCHITECTURES=${{ matrix.CMAKE_OSX_ARCHITECTURES }}
+              #
+              cmake --build ${{ env.TILEDBSOMA_BUILD }} --config Release -j4
+              cmake --build ${{ env.TILEDBSOMA_BUILD }} --target install-libtiledbsoma --config Release
+              #
+              # this should not be needed -- the tiledb core library gets 'co-installed'
+              rm -vf ${{ env.TILEDBSOMA_INSTALL }}/lib/libtiledb.{so,dylib}*
