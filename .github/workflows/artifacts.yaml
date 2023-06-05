@@ -1,13 +1,13 @@
 name: artifacts
 
 on:
-  #pull_request:
-  #  paths-ignore:
-  #    - "apis/python/**"
-  #    - ".pre-commit-config.yaml"
-  push:
-    branches: [main, master]
-  release:
+  pull_request:
+    paths-ignore:
+      - "apis/python/**"
+      - ".pre-commit-config.yaml"
+  #push:
+  #  branches: [main, master]
+  #release:
 
 env:
   TILEDBSOMA_VER: "1.2.4"
