@@ -99,7 +99,15 @@ jobs:
               tar -cvf ${{ github.workspace }}/libtiledbsoma-${{ matrix.ARTIFACT_OS }}-${{ matrix.ARTIFACT_ARCH }}-${{ env.TILEDBSOMA_VER }}-${{ env.TILEDBSOMA_SHA }}.tar *
               gzip -9v ${{ github.workspace }}/libtiledbsoma-${{ matrix.ARTIFACT_OS }}-${{ matrix.ARTIFACT_ARCH }}-${{ env.TILEDBSOMA_VER }}-${{ env.TILEDBSOMA_SHA }}.tar
               
-          - uses: actions/upload-artifact@v3
+          - name: "Artifact"
+            uses: actions/upload-artifact@v3
             with:
               name: libtiledbsoma-${{ matrix.ARTIFACT_OS }}-${{ matrix.ARTIFACT_ARCH }}-${{ env.TILEDBSOMA_VER }}-${{ env.TILEDBSOMA_SHA }}.tar.gz
               path: libtiledbsoma-${{ matrix.ARTIFACT_OS }}-${{ matrix.ARTIFACT_ARCH }}-${{ env.TILEDBSOMA_VER }}-${{ env.TILEDBSOMA_SHA }}.tar.gz
+
+          - name: "Release"
+            uses: softprops/action-gh-release@v1
+            if: startsWith(github.ref, 'refs/tags/')
+            with:
+              files: libtiledbsoma-${{ matrix.ARTIFACT_OS }}-${{ matrix.ARTIFACT_ARCH }}-${{ env.TILEDBSOMA_VER }}-${{ env.TILEDBSOMA_SHA }}.tar.gz
+              
