@@ -7,23 +7,34 @@ on:
   #  paths-ignore:
   #    - "apis/python/**"
   #    - ".pre-commit-config.yaml"
-  #push:
-  #  branches: [main, master]
+  push:
+    branches: [main, master]
   release:
     types:
       - created
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        include:
+          - name: linux
+            os: ubuntu-latest
+          - name: macos
+            os: macOS-latest
+
+    runs-on: ${{ matrix.os }}
+  
     steps:
       - uses: actions/checkout@v3
 
       # steps for building assets
-      - run: echo "It is now " $(date) > release_asset.txt
+      - run: echo "It is now " $(date) > release_asset.${{ matrix.os }}.txr
 
       - uses: shogo82148/actions-upload-release-asset@v1
         with:
           github_token: ${{ secrets.PAT }}
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: release_asset.txt 
+          asset_path: release_asset.${{ matrix.os }}.txt
+          overwrite: true
