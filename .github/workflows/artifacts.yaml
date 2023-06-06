@@ -19,7 +19,7 @@ env:
   ## three variables for scratch space while this runs, defined off the current 'workspace'
   TILEDBSOMA_BUILD: "${{ github.workspace }}/tiledb_build"
   TILEDBSOMA_SOURCE: "${{ github.workspace }}/libtiledbsoma"
-  TILEDBSOMA_INSTALL: "${{ github.workspace }}/.tiledbsoma_dist/$TILEDBSOMA_VER-$TILEDBSOMA_SHA"
+  TILEDBSOMA_INSTALL: "${{ github.workspace }}/.tiledbsoma_dist/${{ github.sha }}"
     
 jobs:
   build:
@@ -97,21 +97,28 @@ jobs:
           - name: "Inspect installation output"
             run: ls -lR ${{ env.TILEDBSOMA_INSTALL }}
 
+          - name: "Get VER Substring"
+            uses: bhowell2/github-substring-action@1.0.2
+            id: versubstr
+            with:
+              value: ${{ env.TILEDBSOMA_VER }}
+              index_of_str: "refs/tags/"
+
           - name: "Get SHA Substring"
             uses: bhowell2/github-substring-action@1.0.2
-            id: substr
+            id: shasubstr
             with:
               value: ${{ env.TILEDBSOMA_SHA }}
               length_from_start: 6
 
-          - name: "Show SHA Substring"
-            run: echo "SHA substr is " ${{ steps.substr.outputs.substring }}
+          - name: "Show Substrings"
+            run: echo "VER " ${{ steps.versubstr.outputs.substring }} " and SHA " ${{ steps.shasubstr.outputs.substring }}
 
           - name: "Archive files"
             run: |
               cd ${{ env.TILEDBSOMA_INSTALL }}
-              tar -cvf ${{ github.workspace }}/libtiledbsoma-${{ matrix.ARTIFACT_OS }}-${{ matrix.ARTIFACT_ARCH }}-${{ env.TILEDBSOMA_VER }}-${{ steps.substr.outputs.substring }}.tar *
-              gzip -9v ${{ github.workspace }}/libtiledbsoma-${{ matrix.ARTIFACT_OS }}-${{ matrix.ARTIFACT_ARCH }}-${{ env.TILEDBSOMA_VER }}-${{ steps.substr.outputs.substring }}.tar
+              tar -cvf ${{ github.workspace }}/libtiledbsoma-${{ matrix.ARTIFACT_OS }}-${{ matrix.ARTIFACT_ARCH }}-${{ steps.versubstr.outputs.substring }}-${{ steps.shasubstr.outputs.substring }}.tar *
+              gzip -9v ${{ github.workspace }}/libtiledbsoma-${{ matrix.ARTIFACT_OS }}-${{ matrix.ARTIFACT_ARCH }}-${{ steps.versubstr.outputs.substring }}-${{ steps.shasubstr.outputs.substring }}.tar
 
           # an 'artifact' is downloadable by clicking on it but has no # external URL
           #- name: "Artifact"
@@ -131,6 +138,6 @@ jobs:
             with:
               github_token: ${{ secrets.PAT }}
               upload_url: ${{ github.event.release.upload_url }}
-              asset_path: libtiledbsoma-${{ matrix.ARTIFACT_OS }}-${{ matrix.ARTIFACT_ARCH }}-${{ env.TILEDBSOMA_VER }}-${{ steps.substr.outputs.substring }}.tar.gz
+              asset_path: libtiledbsoma-${{ matrix.ARTIFACT_OS }}-${{ matrix.ARTIFACT_ARCH }}-${{ steps.versubstr.outputs.substring }}-${{ steps.shasubstr.outputs.substring }}.tar.gz
               overwrite: true
         
