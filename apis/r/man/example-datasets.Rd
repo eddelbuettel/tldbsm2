@@ -11,13 +11,15 @@ list_datasets()
 
 extract_dataset(name, dir = tempdir())
 
-load_dataset(name, dir = tempdir())
+load_dataset(name, dir = tempdir(), tiledbsoma_ctx = NULL)
 }
 \arguments{
 \item{name}{The name of the dataset.}
 
 \item{dir}{The directory where the dataset will be extracted to (default:
 \code{tempdir()}).}
+
+\item{tiledbsoma_ctx}{Optional TileDB \sQuote{Context} object, defaults to \code{NULL}}
 }
 \value{
 \itemize{
@@ -29,7 +31,7 @@ load_dataset(name, dir = tempdir())
 }
 
 \itemize{
-\item \code{load_dataset()} returns an SOMA object.
+\item \code{load_dataset()} returns a SOMA object.
 }
 }
 \description{

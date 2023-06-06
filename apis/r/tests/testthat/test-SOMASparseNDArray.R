@@ -1,7 +1,6 @@
 test_that("SOMASparseNDArray creation", {
   uri <- withr::local_tempdir("sparse-ndarray")
-  ndarray <- SOMASparseNDArray$new(uri, internal_use_only = "allowed_use")
-  ndarray$create(arrow::int32(), shape = c(10, 10))
+  ndarray <- SOMASparseNDArrayCreate(uri, arrow::int32(), shape = c(10, 10))
 
   expect_equal(tiledb::tiledb_object_type(uri), "ARRAY")
   expect_equal(ndarray$dimnames(), c("soma_dim_0", "soma_dim_1"))
@@ -10,33 +9,38 @@ test_that("SOMASparseNDArray creation", {
   expect_equal(tiledb::datatype(ndarray$attributes()$soma_data), "INT32")
 
   mat <- create_sparse_matrix_with_int_dims(10, 10)
+  vals <- as.vector(t(as.matrix(mat)))
+  vals <- vals[ vals != 0 ] # needed below for comparison
   ndarray$write(mat)
+  ndarray$close()
 
-  tbl <- ndarray$read_arrow_table(result_order = "COL_MAJOR")
+  ndarray <- SOMASparseNDArrayOpen(uri)
+
+  tbl <- ndarray$read(result_order = "COL_MAJOR")$tables()$concat()
   expect_true(is_arrow_table(tbl))
   expect_equal(tbl$ColumnNames(), c("soma_dim_0", "soma_dim_1", "soma_data"))
-
   expect_identical(
     as.numeric(tbl$GetColumnByName("soma_data")),
     ## need to convert to Csparsematrix first to get x values sorted appropriately
-    as.numeric(as(mat, "CsparseMatrix")@x)
+    ##-- gets values _transposed_:  as.numeric(as(mat, "CsparseMatrix")@x)
+    as.numeric(vals)
   )
 
-  # Subset both dims
-  tbl <- ndarray$read_arrow_table(
+  ## Subset both dims
+  tbl <- ndarray$read(
     coords = list(soma_dim_0=0, soma_dim_1=0:2),
     result_order = "COL_MAJOR"
-  )
+  )$tables()$concat()
   expect_identical(
     as.numeric(tbl$GetColumnByName("soma_data")),
     as.numeric(mat[1, 1:3])
   )
 
-  # Subset both dims, unnamed
-  tbl <- ndarray$read_arrow_table(
+  ## Subset both dims, unnamed
+  tbl <- ndarray$read(
     coords = list(0, 0:2),
     result_order = "COL_MAJOR"
-  )
+  )$tables()$concat()
   expect_identical(
     as.numeric(tbl$GetColumnByName("soma_data")),
     as.numeric(mat[1, 1:3])
@@ -65,41 +69,75 @@ test_that("SOMASparseNDArray creation", {
   expect_equal(shape(uri), c(10,10))
   ## shape with config, expected breakge as 'bad key' used
   expect_error(shape(uri, c(sm.encryption_key="Nope", sm.encryption_type="AES_256_GCM")))
-  
+
+  ndarray$close()
+
 })
 
-test_that("SOMASparseNDArray read_sparse_matrix_zero_based", {
+test_that("SOMASparseNDArray read_sparse_matrix", {
   uri <- withr::local_tempdir("sparse-ndarray")
-  ndarray <- SOMASparseNDArray$new(uri, internal_use_only = "allowed_use")
-  ndarray$create(arrow::int32(), shape = c(10, 10))
+  ndarray <- SOMASparseNDArrayCreate(uri, arrow::int32(), shape = c(10, 10))
 
   # For this test, write 9x9 data into 10x10 array. Leaving the last row & column
   # empty touches corner cases with setting dims() correctly
   mat <- create_sparse_matrix_with_int_dims(9, 9)
   ndarray$write(mat)
   expect_equal(as.numeric(ndarray$shape()), c(10, 10))
+  ndarray$close()
 
   # read_sparse_matrix
-  mat2 <- ndarray$read_sparse_matrix_zero_based(repr="T")
+  ndarray <- SOMASparseNDArrayOpen(uri)
+  mat2 <- ndarray$read()$sparse_matrix(zero_based = T)$concat()
   expect_true(inherits(mat2, "matrixZeroBasedView"))
-  expect_s4_class(as.one.based(mat2), "sparseMatrix")
-  expect_equal(dim(mat2), c(10, 10))
-  expect_equal(nrow(mat2), 10)
-  expect_equal(ncol(mat2), 10)
+  expect_s4_class(mat2$get_one_based_matrix(), "sparseMatrix")
+  expect_equal(mat2$dim(), c(10, 10))
+  expect_equal(mat2$nrow(), 10)
+  expect_equal(mat2$ncol(), 10)
   ## not sure why all.equal(mat, mat2) does not pass
-  expect_true(all.equal(as.numeric(mat), as.numeric(mat2[0:8,0:8])))
-  expect_equal(sum(mat), sum(as.one.based(mat2)))
+  expect_true(all.equal(as.numeric(mat[1:9, 1:9]), as.numeric(mat2$take(0:8, 0:8)$get_one_based_matrix())))
+  expect_equal(sum(mat), sum(mat2$get_one_based_matrix()))
+
+  ndarray <- SOMASparseNDArrayOpen(uri)
+
+  ndarray$close()
+})
+
+test_that("SOMASparseNDArray read_sparse_matrix_zero_based", {
+  uri <- withr::local_tempdir("sparse-ndarray")
+  ndarray <- SOMASparseNDArrayCreate(uri, arrow::int32(), shape = c(10, 10))
+
+  # For this test, write 9x9 data into 10x10 array. Leaving the last row & column
+  # empty touches corner cases with setting dims() correctly
+  mat <- create_sparse_matrix_with_int_dims(9, 9)
+  ndarray$write(mat)
+  expect_equal(as.numeric(ndarray$shape()), c(10, 10))
+  ndarray$close()
+
+  # read_sparse_matrix
+  ndarray <- SOMASparseNDArrayOpen(uri)
+  mat2 <- ndarray$read()$sparse_matrix(zero_based=T)$concat()
+  expect_true(inherits(mat2, "matrixZeroBasedView"))
+  expect_s4_class(mat2$get_one_based_matrix(), "sparseMatrix")
+  expect_equal(mat2$dim(), c(10, 10))
+  expect_equal(mat2$nrow(), 10)
+  expect_equal(mat2$ncol(), 10)
+  ## not sure why all.equal(mat, mat2) does not pass
+  expect_true(all.equal(as.numeric(mat), as.numeric(mat2$take(0:8,0:8)$get_one_based_matrix())))
+  expect_equal(sum(mat), sum(mat2$get_one_based_matrix()))
+
+  ndarray <- SOMASparseNDArrayOpen(uri)
 
   # repeat with iterated reader
-  ndarray$read_sparse_matrix_zero_based(repr="T", iterated=TRUE)
-  mat2 <- ndarray$read_next()
+  iterator <- ndarray$read()$sparse_matrix(zero_based = T)
+  mat2 <- iterator$read_next()
   expect_true(inherits(mat2, "matrixZeroBasedView"))
-  expect_s4_class(as.one.based(mat2), "sparseMatrix")
-  expect_equal(dim(mat2), c(10, 10))
-  expect_equal(nrow(mat2), 10)
-  expect_equal(ncol(mat2), 10)
-  expect_true(all.equal(as.numeric(mat), as.numeric(mat2[0:8,0:8])))
-  expect_equal(sum(mat), sum(as.one.based(mat2)))
+  expect_s4_class(mat2$get_one_based_matrix(), "sparseMatrix")
+  expect_equal(mat2$dim(), c(10, 10))
+  expect_equal(mat2$nrow(), 10)
+  expect_equal(mat2$ncol(), 10)
+  expect_true(all.equal(as.numeric(mat), as.numeric(mat2$take(0:8,0:8)$get_one_based_matrix())))
+  expect_equal(sum(mat), sum(mat2$get_one_based_matrix()))
+  ndarray$close()
 })
 
 test_that("SOMASparseNDArray creation with duplicates", {
@@ -232,6 +270,8 @@ test_that("platform_config is respected", {
   expect_equal(tiledb::tiledb_filter_type(a1), "BITSHUFFLE")
   expect_equal(tiledb::tiledb_filter_type(a2), "ZSTD")
   expect_equal(tiledb::tiledb_filter_get_option(a2, "COMPRESSION_LEVEL"), 9)
+
+  snda$close()
 })
 
 test_that("platform_config defaults", {
@@ -267,4 +307,5 @@ test_that("platform_config defaults", {
   expect_equal(tiledb::tiledb_filter_type(d1), "ZSTD")
   expect_equal(tiledb::tiledb_filter_get_option(d1, "COMPRESSION_LEVEL"), 3)
 
+  snda$close()
 })

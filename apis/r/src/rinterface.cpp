@@ -1,6 +1,11 @@
 #include <Rcpp.h>               // for R interface to C++
 #include <nanoarrow.h>          // for C interface to Arrow
 
+// we currently get deprecation warnings by default which are noisy
+#ifndef TILEDB_NO_API_DEPRECATION_WARNINGS
+#define TILEDB_NO_API_DEPRECATION_WARNINGS
+#endif
+
 // We get these via nanoarrow and must cannot include carrow.h again
 #define ARROW_SCHEMA_AND_ARRAY_DEFINED 1
 #include <tiledbsoma/tiledbsoma>
@@ -35,6 +40,9 @@ Rcpp::XPtr<ArrowArray> array_owning_xptr(void) {
 }
 
 namespace tdbs = tiledbsoma;
+
+Rcpp::XPtr<ArrowSchema> schema_setup_struct(Rcpp::XPtr<ArrowSchema> schxp, int64_t n_children);
+Rcpp::XPtr<ArrowArray> array_setup_struct(Rcpp::XPtr<ArrowArray> arrxp, int64_t n_children);
 
 //' Read SOMA Data From a Given URI
 //'
@@ -91,12 +99,12 @@ Rcpp::List soma_array_reader(const std::string& uri,
 
     // Read selected columns from the uri (return is unique_ptr<SOMAArray>)
     auto sr = tdbs::SOMAArray::open(TILEDB_READ,
-                                          uri,
-                                          "unnamed",         // name parameter could be added
-                                          platform_config,   // to add, done in iterated reader
-                                          column_names,
-                                          batch_size,
-                                          result_order);
+                                    uri,
+                                    "unnamed",         // name parameter could be added
+                                    platform_config,   // to add, done in iterated reader
+                                    column_names,
+                                    batch_size,
+                                    result_order);
 
     std::unordered_map<std::string, std::shared_ptr<tiledb::Dimension>> name2dim;
     std::shared_ptr<tiledb::ArraySchema> schema = sr->schema();
@@ -146,11 +154,8 @@ Rcpp::List soma_array_reader(const std::string& uri,
     auto ncol = names.size();
     Rcpp::XPtr<ArrowSchema> schemaxp = schema_owning_xptr();
     Rcpp::XPtr<ArrowArray> arrayxp = array_owning_xptr();
-    ArrowSchemaInitFromType((ArrowSchema*)R_ExternalPtrAddr(schemaxp), NANOARROW_TYPE_STRUCT);
-    ArrowSchemaAllocateChildren((ArrowSchema*)R_ExternalPtrAddr(schemaxp), ncol);
-    ArrowArrayInitFromType((ArrowArray*)R_ExternalPtrAddr(arrayxp), NANOARROW_TYPE_STRUCT);
-    ArrowArrayAllocateChildren((ArrowArray*)R_ExternalPtrAddr(arrayxp), ncol);
-
+    schemaxp = schema_setup_struct(schemaxp, ncol);
+    arrayxp = array_setup_struct(arrayxp, ncol);
     arrayxp->length = 0;
 
     for (size_t i=0; i<ncol; i++) {

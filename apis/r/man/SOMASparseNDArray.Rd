@@ -23,14 +23,13 @@ the object are overwritten and new index values are added. (lifecycle: experimen
 }
 }
 \section{Super classes}{
-\code{tiledbsoma::TileDBObject} -> \code{tiledbsoma::TileDBArray} -> \code{tiledbsoma::SOMAArrayBase} -> \code{SOMASparseNDArray}
+\code{\link[tiledbsoma:TileDBObject]{tiledbsoma::TileDBObject}} -> \code{\link[tiledbsoma:TileDBArray]{tiledbsoma::TileDBArray}} -> \code{\link[tiledbsoma:SOMAArrayBase]{tiledbsoma::SOMAArrayBase}} -> \code{SOMASparseNDArray}
 }
 \section{Methods}{
 \subsection{Public methods}{
 \itemize{
 \item \href{#method-SOMASparseNDArray-create}{\code{SOMASparseNDArray$create()}}
-\item \href{#method-SOMASparseNDArray-read_arrow_table}{\code{SOMASparseNDArray$read_arrow_table()}}
-\item \href{#method-SOMASparseNDArray-read_sparse_matrix}{\code{SOMASparseNDArray$read_sparse_matrix()}}
+\item \href{#method-SOMASparseNDArray-read}{\code{SOMASparseNDArray$read()}}
 \item \href{#method-SOMASparseNDArray-write}{\code{SOMASparseNDArray$write()}}
 \item \href{#method-SOMASparseNDArray-nnz}{\code{SOMASparseNDArray$nnz()}}
 \item \href{#method-SOMASparseNDArray-clone}{\code{SOMASparseNDArray$clone()}}
@@ -41,8 +40,9 @@ the object are overwritten and new index values are added. (lifecycle: experimen
 <ul>
 <li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBObject" data-id="class"><a href='../../tiledbsoma/html/TileDBObject.html#method-TileDBObject-class'><code>tiledbsoma::TileDBObject$class()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBObject" data-id="exists"><a href='../../tiledbsoma/html/TileDBObject.html#method-TileDBObject-exists'><code>tiledbsoma::TileDBObject$exists()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBObject" data-id="get_tiledb_config"><a href='../../tiledbsoma/html/TileDBObject.html#method-TileDBObject-get_tiledb_config'><code>tiledbsoma::TileDBObject$get_tiledb_config()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBObject" data-id="initialize"><a href='../../tiledbsoma/html/TileDBObject.html#method-TileDBObject-initialize'><code>tiledbsoma::TileDBObject$initialize()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBObject" data-id="is_open"><a href='../../tiledbsoma/html/TileDBObject.html#method-TileDBObject-is_open'><code>tiledbsoma::TileDBObject$is_open()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBObject" data-id="mode"><a href='../../tiledbsoma/html/TileDBObject.html#method-TileDBObject-mode'><code>tiledbsoma::TileDBObject$mode()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBArray" data-id="attributes"><a href='../../tiledbsoma/html/TileDBArray.html#method-TileDBArray-attributes'><code>tiledbsoma::TileDBArray$attributes()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBArray" data-id="attrnames"><a href='../../tiledbsoma/html/TileDBArray.html#method-TileDBArray-attrnames'><code>tiledbsoma::TileDBArray$attrnames()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBArray" data-id="close"><a href='../../tiledbsoma/html/TileDBArray.html#method-TileDBArray-close'><code>tiledbsoma::TileDBArray$close()</code></a></span></li>
@@ -53,6 +53,7 @@ the object are overwritten and new index values are added. (lifecycle: experimen
 <li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBArray" data-id="get_metadata"><a href='../../tiledbsoma/html/TileDBArray.html#method-TileDBArray-get_metadata'><code>tiledbsoma::TileDBArray$get_metadata()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBArray" data-id="index_column_names"><a href='../../tiledbsoma/html/TileDBArray.html#method-TileDBArray-index_column_names'><code>tiledbsoma::TileDBArray$index_column_names()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBArray" data-id="ndim"><a href='../../tiledbsoma/html/TileDBArray.html#method-TileDBArray-ndim'><code>tiledbsoma::TileDBArray$ndim()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBArray" data-id="open"><a href='../../tiledbsoma/html/TileDBArray.html#method-TileDBArray-open'><code>tiledbsoma::TileDBArray$open()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBArray" data-id="print"><a href='../../tiledbsoma/html/TileDBArray.html#method-TileDBArray-print'><code>tiledbsoma::TileDBArray$print()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBArray" data-id="reset_query"><a href='../../tiledbsoma/html/TileDBArray.html#method-TileDBArray-reset_query'><code>tiledbsoma::TileDBArray$reset_query()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBArray" data-id="schema"><a href='../../tiledbsoma/html/TileDBArray.html#method-TileDBArray-schema'><code>tiledbsoma::TileDBArray$schema()</code></a></span></li>
@@ -61,8 +62,6 @@ the object are overwritten and new index values are added. (lifecycle: experimen
 <li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBArray" data-id="shape"><a href='../../tiledbsoma/html/TileDBArray.html#method-TileDBArray-shape'><code>tiledbsoma::TileDBArray$shape()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBArray" data-id="tiledb_array"><a href='../../tiledbsoma/html/TileDBArray.html#method-TileDBArray-tiledb_array'><code>tiledbsoma::TileDBArray$tiledb_array()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBArray" data-id="tiledb_schema"><a href='../../tiledbsoma/html/TileDBArray.html#method-TileDBArray-tiledb_schema'><code>tiledbsoma::TileDBArray$tiledb_schema()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="SOMAArrayBase" data-id="read_complete"><a href='../../tiledbsoma/html/SOMAArrayBase.html#method-SOMAArrayBase-read_complete'><code>tiledbsoma::SOMAArrayBase$read_complete()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="SOMAArrayBase" data-id="read_next"><a href='../../tiledbsoma/html/SOMAArrayBase.html#method-SOMAArrayBase-read_next'><code>tiledbsoma::SOMAArrayBase$read_next()</code></a></span></li>
 </ul>
 </details>
 }}
@@ -72,7 +71,12 @@ the object are overwritten and new index values are added. (lifecycle: experimen
 \subsection{Method \code{create()}}{
 Create a SOMASparseNDArray named with the URI. (lifecycle: experimental)
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SOMASparseNDArray$create(type, shape, platform_config = NULL)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{SOMASparseNDArray$create(
+  type,
+  shape,
+  platform_config = NULL,
+  internal_use_only = NULL
+)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -81,20 +85,25 @@ Create a SOMASparseNDArray named with the URI. (lifecycle: experimental)
 \item{\code{type}}{an \link[arrow:data-type]{Arrow type} defining the type of each element in the array.}
 
 \item{\code{shape}}{a vector of integers defining the shape of the array.}
+
+\item{\code{platform_config}}{A \link[tiledbsoma:PlatformConfig]{platform configuration}
+object}
+
+\item{\code{internal_use_only}}{Character value to signal this is a 'permitted' call,
+as \code{create()} is considered internal and should not be called directly.}
 }
 \if{html}{\out{</div>}}
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-SOMASparseNDArray-read_arrow_table"></a>}}
-\if{latex}{\out{\hypertarget{method-SOMASparseNDArray-read_arrow_table}{}}}
-\subsection{Method \code{read_arrow_table()}}{
-Read as an 'arrow::Table' (lifecycle: experimental)
+\if{html}{\out{<a id="method-SOMASparseNDArray-read"></a>}}
+\if{latex}{\out{\hypertarget{method-SOMASparseNDArray-read}{}}}
+\subsection{Method \code{read()}}{
+Reads a user-defined slice of the \code{SOMASparseNDArray}
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SOMASparseNDArray$read_arrow_table(
+\if{html}{\out{<div class="r">}}\preformatted{SOMASparseNDArray$read(
   coords = NULL,
   result_order = "auto",
-  iterated = FALSE,
   log_level = "warn"
 )}\if{html}{\out{</div>}}
 }
@@ -109,59 +118,15 @@ read. List elements can be named when specifying a subset of dimensions.}
 \item{\code{result_order}}{Optional order of read results. This can be one of either
 \verb{"ROW_MAJOR, }"COL_MAJOR"\verb{, or }"auto"` (default).}
 
-\item{\code{result_order}}{Optional order of read results. This can be one of either
-\verb{"ROW_MAJOR, }"COL_MAJOR"\verb{, or }"auto"` (default).}
+\item{\code{log_level}}{Optional logging level with default value of \code{"warn"}.}
 
 \item{\code{iterated}}{Option boolean indicated whether data is read in call (when
 \code{FALSE}, the default value) or in several iterated steps.}
-
-\item{\code{log_level}}{Optional logging level with default value of \code{"warn"}.}
 }
 \if{html}{\out{</div>}}
 }
 \subsection{Returns}{
-An \code{\link[arrow:Table]{arrow::Table}}.
-}
-}
-\if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-SOMASparseNDArray-read_sparse_matrix"></a>}}
-\if{latex}{\out{\hypertarget{method-SOMASparseNDArray-read_sparse_matrix}{}}}
-\subsection{Method \code{read_sparse_matrix()}}{
-Read as a sparse matrix (lifecycle: experimental)
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SOMASparseNDArray$read_sparse_matrix(
-  coords = NULL,
-  result_order = "auto",
-  repr = c("C", "T", "R"),
-  iterated = FALSE,
-  log_level = "warn"
-)}\if{html}{\out{</div>}}
-}
-
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{coords}}{Optional \code{list} of integer vectors, one for each dimension, with a
-length equal to the number of values to read. If \code{NULL}, all values are
-read. List elements can be named when specifying a subset of dimensions.}
-
-\item{\code{result_order}}{Optional order of read results. This can be one of either
-\verb{"ROW_MAJOR, }"COL_MAJOR"\verb{, or }"auto"` (default).}
-
-\item{\code{result_order}}{Optional order of read results. This can be one of either
-\verb{"ROW_MAJOR, }"COL_MAJOR"\verb{, or }"auto"` (default).}
-
-\item{\code{repr}}{Optional one-character code for sparse matrix representation type}
-
-\item{\code{iterated}}{Option boolean indicated whether data is read in call (when
-\code{FALSE}, the default value) or in several iterated steps.}
-
-\item{\code{log_level}}{Optional logging level with default value of \code{"warn"}.}
-}
-\if{html}{\out{</div>}}
-}
-\subsection{Returns}{
-A \code{matrix} object
+\link{SOMASparseNDArrayRead}
 }
 }
 \if{html}{\out{<hr>}}

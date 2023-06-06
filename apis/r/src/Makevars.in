@@ -3,9 +3,6 @@ CXX_STD = CXX17
 ## We need the TileDB Headers, and for macOS aka Darwin need to set minimum version 10.14 for macOS
 PKG_CPPFLAGS = -I. -I../inst/include/ @tiledb_include@ @cxx17_macos@ -Iinclude
 
-## When this becomes a CRAN package we may have to remove this. For now it keeps the noise down
-PKG_CXXFLAGS = -Wno-deprecated-declarations
-
 ## We also need the TileDB library
 PKG_LIBS = @cxx17_macos@ @tiledb_libs@ @tiledb_rpath@
 
@@ -13,7 +10,7 @@ all: $(SHLIB)
         # On macOS aka Darwin we call install_name_tool
         # Case one: If we had a downloaded TileDB Core artifact, adjust zlib path and add to @rpath
         # Case two: If we see the system libraries (on macOS) ensure /usr/local/lib rpath is considered
-	if [ `uname -s` = 'Darwin' ] && [ -f tiledbsoma.so ]; then \
+	@if [ `uname -s` = 'Darwin' ] && [ -f tiledbsoma.so ]; then \
 	    if [ -f ../inst/tiledb/lib/libtiledb.dylib ] ; then \
 	        install_name_tool -change libz.1.dylib @rpath/libz.1.dylib ../inst/tiledb/lib/libtiledb.dylib; \
 	        install_name_tool -add_rpath @loader_path/../tiledb/lib tiledbsoma.so; \

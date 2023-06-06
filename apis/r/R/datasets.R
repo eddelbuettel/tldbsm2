@@ -58,10 +58,11 @@ extract_dataset <- function(name, dir = tempdir()) {
 }
 
 #' @rdname example-datasets
+#' @param tiledbsoma_ctx Optional TileDB \sQuote{Context} object, defaults to \code{NULL}
 #' @return
 #'  - `load_dataset()` returns a SOMA object.
 #' @export
-load_dataset <- function(name, dir = tempdir()) {
+load_dataset <- function(name, dir = tempdir(), tiledbsoma_ctx = NULL) {
   dataset_uri <- extract_dataset(name, dir)
 
   # Inspect the object's metadata
@@ -73,10 +74,11 @@ load_dataset <- function(name, dir = tempdir()) {
   )
 
   # Instantiate the proper SOMA object
+  object$open(internal_use_only = "allowed_use")
   switch(
     object$get_metadata("soma_object_type"),
-    "SOMAExperiment" = SOMAExperimentOpen(dataset_uri),
-    "SOMADataFrame" = SOMADataFrameOpen(dataset_uri),
+    "SOMAExperiment" = SOMAExperimentOpen(dataset_uri, tiledbsoma_ctx = tiledbsoma_ctx),
+    "SOMADataFrame" = SOMADataFrameOpen(dataset_uri, tiledbsoma_ctx = tiledbsoma_ctx),
     stop("The dataset is an unsupported SOMA object", call. = FALSE)
   )
 }

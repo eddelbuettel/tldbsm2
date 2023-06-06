@@ -9,7 +9,6 @@ EphemeralCollectionBase <- R6::R6Class(
   inherit = SOMACollectionBase,
 
   public = list(
-
     # Override TileDBObject methods
     #' @description Create an ephemeral collection
     #'
@@ -48,7 +47,18 @@ EphemeralCollectionBase <- R6::R6Class(
           call. = FALSE
         )
       }
-      return(gen$new())
+      return (gen$new())
+    },
+
+    # Override TileDBGroup private methods
+    #' @description \Sexpr[results=rd]{tiledbsoma:::rd_ephemeral_desc()}
+    #'
+    #' @param mode \Sexpr[results=rd]{tiledbsoma:::rd_ephemeral_param()}
+    #'
+    #' @return \Sexpr[results=rd]{tiledbsoma:::rd_ephemeral_error()}
+    #'
+    open = function(mode) {
+      private$.ephemeral_error('opened')
     },
 
     #' @description \Sexpr[results=rd]{tiledbsoma:::rd_ephemeral_desc()}
@@ -105,6 +115,19 @@ EphemeralCollectionBase <- R6::R6Class(
       return(NULL)
     },
 
+    #' @description Retrieve the number of items in the collection
+    #'
+    #' @return The length of the collection
+    length = function() {
+      length(private$.data)
+    },
+
+    #' @description Retrieve the names of members. (lifecycle: experimental)
+    #' @return A \code{character} vector of member names.
+    names = function() {
+      names(private$.data) %||% character(length = 0L)
+    },
+
     #' @description Add object to an ephemeral collection
     #'
     #' @param object A TileDB object (eg. \code{\link{TileDBGroup}}) to add
@@ -132,7 +155,6 @@ EphemeralCollectionBase <- R6::R6Class(
       }
       name <- name %||% object$uri
       private$.data[[name]] <- object
-      private$update_member_cache()
       return(invisible(self))
     },
 
@@ -144,7 +166,6 @@ EphemeralCollectionBase <- R6::R6Class(
     #'
     get = function(name) {
       stopifnot(is_scalar_character(name))
-      private$update_member_cache()
       name <- match.arg(arg = name, choices = self$names())
       return(private$.data[[name]])
     },
@@ -157,10 +178,8 @@ EphemeralCollectionBase <- R6::R6Class(
     #' \code{name} removed
     remove = function(name) {
       stopifnot(is_scalar_character(name))
-      private$update_member_cache()
       name <- match.arg(arg = name, choices = self$names())
       private$.data[[name]] <- NULL
-      private$update_member_cache()
       return(invisible(self))
     },
 
@@ -279,7 +298,6 @@ EphemeralCollectionBase <- R6::R6Class(
 
   private = list(
     # Override SOMACollectionBase private fields
-    tiledb_object = NULL,
     tiledb_uri = NULL,
     tiledb_platform_config = NULL,
     .tiledbsoma_ctx = NULL,
@@ -288,13 +306,15 @@ EphemeralCollectionBase <- R6::R6Class(
     # Override TileDBGroup private fields
     member_cache = NULL,
 
+    check_open_for_read = function() { },
+    check_open_for_write = function() { },
+    check_open_for_read_or_write = function() { },
+
+    fill_member_cache_if_null = function() { },
+    update_member_cache = function() { },
+
     # Override SOMACollectionBase private fields
     soma_type_cache = NULL,
-
-    # Override TileDBGroup private methods
-    open = function(mode) {
-      private$.ephemeral_error('opened')
-    },
 
     initialize_object = function() {
       private$.ephemeral_error('custom', 'and cannot be initialized')

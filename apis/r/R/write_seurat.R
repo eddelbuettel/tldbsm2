@@ -2,7 +2,7 @@
 #'
 NULL
 
-#' Convert a \pkg{Seurat} Sub-Object to a SOMA Object
+#' Convert a \pkg{Seurat} Sub-Object to a SOMA Object, returned opened for write
 #'
 #' Various helpers to write \pkg{Seurat} sub-objects to SOMA objects.
 #'
@@ -23,7 +23,7 @@ NULL
 NULL
 
 #' @return \code{Assay} method: a \code{\link{SOMAMeasurement}} with the
-#' data from \code{x}
+#' data from \code{x}, returned opened for write
 #'
 #' @rdname write_soma_seurat_sub
 #'
@@ -93,11 +93,18 @@ write_soma.Assay <- function(
   )
 
   # Write `X` matrices
-  for (slot in c('counts', 'data', 'scale.data')) {
-    mat <- SeuratObject::GetAssayData(object = x, slot = slot)
-    if (SeuratObject::IsMatrixEmpty(mat)) {
-      next
+  for (slot in c("counts", "data", "scale.data")) {
+    mat <- SeuratObject::GetAssayData(x, slot = slot)
+    if (SeuratObject::IsMatrixEmpty(mat)) next
+
+    # Skip 'data' slot if it's identical to 'counts'
+    if (slot == "data") {
+      if (identical(mat, SeuratObject::GetAssayData(x, slot = "counts"))) {
+        spdl::info("Skipping 'data' slot because it's identical to 'counts'")
+        next
+      }
     }
+
     if (!identical(x = dim(mat), y = dim(x))) {
       spdl::info("Padding layer {} to match dimensions of assay", sQuote(slot))
       mat <- pad_matrix(
@@ -133,6 +140,7 @@ write_soma.Assay <- function(
       }
     )
   }
+  ms$X$close()
 
   # Write feature-level meta data
   var_df <- .df_index(
@@ -177,7 +185,7 @@ write_soma.Assay <- function(
 #' (eg. \code{nrow(assay)})
 #'
 #' @return \code{DimReduc} and \code{Graph} methods: invisibly returns
-#' \code{soma_parent} with the values of \code{x} added to it
+#' \code{soma_parent}, opened for write, with the values of \code{x} added to it
 #'
 #' @rdname write_soma_seurat_sub
 #'
@@ -236,6 +244,8 @@ write_soma.DimReduc <- function(
       platform_config = platform_config,
       tiledbsoma_ctx = tiledbsoma_ctx
     )
+  } else {
+    soma_parent$obsm$open("WRITE", internal_use_only = "allowed_use")
   }
   embed <- paste0('X_', key)
   spdl::info("Adding embeddings as {}", sQuote(embed))
@@ -253,6 +263,7 @@ write_soma.DimReduc <- function(
     ),
     name = embed
   )
+  soma_parent$obsm$close()
 
   # Add feature loadings
   loadings <- SeuratObject::Loadings(x)
@@ -319,6 +330,7 @@ write_soma.DimReduc <- function(
       ),
       name = ldgs
     )
+    soma_parent$varm$close()
   }
   return(invisible(soma_parent))
 }
@@ -371,10 +383,11 @@ write_soma.Graph <- function(
     ),
     name = uri
   )
+  soma_parent$obsp$close()
   return(invisible(soma_parent))
 }
 
-#' Write a \code{\link[SeuratObject]{Seurat}} object to a SOMA
+#' Write a \code{\link[SeuratObject]{Seurat}} object to a SOMA, returned opened for write
 #'
 #' @inheritParams write_soma
 #' @param x A \code{\link[SeuratObject]{Seurat}} object
@@ -564,6 +577,6 @@ write_soma.Seurat <- function(
       immediate. = TRUE
     )
   }
-  try(experiment$close(), silent = TRUE)
+  experiment$close()
   return(experiment$uri)
 }
