@@ -109,7 +109,7 @@ jobs:
             id: shasubstr
             with:
               value: ${{ env.TILEDBSOMA_SHA }}
-              length_from_start: 6
+              length_from_start: 7
 
           - name: "Show Substrings"
             run: echo "VER " ${{ steps.versubstr.outputs.substring }} " and SHA " ${{ steps.shasubstr.outputs.substring }}
