@@ -1,13 +1,15 @@
 name: artifacts
 
 on:
-  pull_request:
-    paths-ignore:
-      - "apis/python/**"
-      - ".pre-commit-config.yaml"
+  #pull_request:
+  #  paths-ignore:
+  #    - "apis/python/**"
+  #    - ".pre-commit-config.yaml"
   #push:
   #  branches: [main, master]
-  #release:
+  release:
+    types:
+      - created
 
 env:
   TILEDBSOMA_VER: "1.2.4"
@@ -22,7 +24,6 @@ jobs:
     strategy:
       matrix:
         #considering https://stackoverflow.com/questions/65035256/how-to-access-matrix-variables-in-github-actions
-        environ: [macos_x86, macos_arm, linux]
         include:
           - environ: 'macos_x86'
             imageName: "macOS-11"
@@ -98,16 +99,25 @@ jobs:
               cd ${{ env.TILEDBSOMA_INSTALL }}
               tar -cvf ${{ github.workspace }}/libtiledbsoma-${{ matrix.ARTIFACT_OS }}-${{ matrix.ARTIFACT_ARCH }}-${{ env.TILEDBSOMA_VER }}-${{ env.TILEDBSOMA_SHA }}.tar *
               gzip -9v ${{ github.workspace }}/libtiledbsoma-${{ matrix.ARTIFACT_OS }}-${{ matrix.ARTIFACT_ARCH }}-${{ env.TILEDBSOMA_VER }}-${{ env.TILEDBSOMA_SHA }}.tar
-              
-          - name: "Artifact"
-            uses: actions/upload-artifact@v3
-            with:
-              name: libtiledbsoma-${{ matrix.ARTIFACT_OS }}-${{ matrix.ARTIFACT_ARCH }}-${{ env.TILEDBSOMA_VER }}-${{ env.TILEDBSOMA_SHA }}.tar.gz
-              path: libtiledbsoma-${{ matrix.ARTIFACT_OS }}-${{ matrix.ARTIFACT_ARCH }}-${{ env.TILEDBSOMA_VER }}-${{ env.TILEDBSOMA_SHA }}.tar.gz
+
+          # an 'artifact' is downloadable by clicking on it but has no # external URL
+          #- name: "Artifact"
+          #  uses: actions/upload-artifact@v3
+          #  with:
+          #    name: libtiledbsoma-${{ matrix.ARTIFACT_OS }}-${{ matrix.ARTIFACT_ARCH }}-${{ env.TILEDBSOMA_VER }}-${{ env.TILEDBSOMA_SHA }}.tar.gz
+          #    path: libtiledbsoma-${{ matrix.ARTIFACT_OS }}-${{ matrix.ARTIFACT_ARCH }}-${{ env.TILEDBSOMA_VER }}-${{ env.TILEDBSOMA_SHA }}.tar.gz
+
+          #- name: "Release"
+          #  uses: softprops/action-gh-release@v1
+          #  if: startsWith(github.ref, 'refs/tags/')
+          #  with:
+          #    files: libtiledbsoma-${{ matrix.ARTIFACT_OS }}-${{ matrix.ARTIFACT_ARCH }}-${{ env.TILEDBSOMA_VER }}-${{ env.TILEDBSOMA_SHA }}.tar.gz
 
           - name: "Release"
-            uses: softprops/action-gh-release@v1
-            if: startsWith(github.ref, 'refs/tags/')
+            uses: shogo82148/actions-upload-release-asset@v1
             with:
-              files: libtiledbsoma-${{ matrix.ARTIFACT_OS }}-${{ matrix.ARTIFACT_ARCH }}-${{ env.TILEDBSOMA_VER }}-${{ env.TILEDBSOMA_SHA }}.tar.gz
-              
+              github_token: ${{ secrets.PAT }}
+              upload_url: ${{ github.event.release.upload_url }}
+              asset_path: libtiledbsoma-${{ matrix.ARTIFACT_OS }}-${{ matrix.ARTIFACT_ARCH }}-${{ env.TILEDBSOMA_VER }}-${{ env.TILEDBSOMA_SHA }}.tar.gz
+              overwrite: true
+        
