@@ -22,7 +22,7 @@ env:
   TILEDBSOMA_BUILD: "${{ github.workspace }}/tiledb_build"
   TILEDBSOMA_SOURCE: "${{ github.workspace }}/libtiledbsoma"
   TILEDBSOMA_INSTALL: "${{ github.workspace }}/.tiledbsoma_dist/${{ github.sha }}"
-    
+
 jobs:
   build:
     
@@ -43,7 +43,7 @@ jobs:
             ARTIFACT_OS: 'macos'
             ARTIFACT_ARCH: 'arm64'
           - environ: "linux"
-            imageName: "manylinux2014"
+            imageName: "manylinux2014_x86_64"
             CMAKE_OSX_ARCHITECTURES: ""
             MACOSX_DEPLOYMENT_TARGET: ""
             ARTIFACT_OS: 'linux'
