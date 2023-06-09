@@ -23,9 +23,9 @@
 #' @return A List object with two pointers to Arrow array data and schema is returned
 #' @examples
 #' \dontrun{
-#' uri <- "test/soco/pbmc3k_processed/obs"
+#' uri <- extract_dataset("soma-dataframe-pbmc3k-processed-obs")
 #' z <- soma_array_reader(uri)
-#' tb <- as_arrow_table(z)
+#' arrow::RecordBatch$import_from_c(z$array_data, z$schema)
 #' }
 #' @export
 soma_array_reader <- function(uri, colnames = NULL, qc = NULL, dim_points = NULL, dim_ranges = NULL, batch_size = "auto", result_order = "auto", loglevel = "auto", config = NULL) {
@@ -88,6 +88,8 @@ shape <- function(uri, config = NULL) {
 #' @param result_order Optional argument for query result order, defaults to \sQuote{auto}
 #' @param loglevel Character value with the desired logging level, defaults to \sQuote{auto}
 #' which lets prior setting prevail, any other value is set as new logging level.
+#' @param timestamp_end Optional POSIXct (i.e. Datetime) type for end of interval for which
+#' data is considered.
 #' @param sr An external pointer to a TileDB SOMAArray object
 #'
 #' @return \code{sr_setup} returns an external pointer to a SOMAArray. \code{sr_complete}
@@ -95,18 +97,14 @@ shape <- function(uri, config = NULL) {
 #'
 #' @examples
 #' \dontrun{
+#' uri <- extract_dataset("soma-dataframe-pbmc3k-processed-obs")
 #' ctx <- tiledb::tiledb_ctx()
-#' uri <- "test/soco/pbmc3k_processed/obs"
-#' sr <- sr_setup(uri, config=as.character(tiledb::config(ctx)), loglevel="auto")
+#' sr <- sr_setup(uri, config=as.character(tiledb::config(ctx)))
 #' rl <- data.frame()
 #' while (!sr_complete(sr)) {
-#'     sr |>
-#'         sr_next() |>
-#'         as_arrow_table() |>
-#'         collect() |>
-#'         as.data.frame() |>
-#'         data.table() -> D
-#'     rl <- rbind(rl, D)
+#'   dat <- sr_next(sr)
+#'   rb <- arrow::RecordBatch$import_from_c(dat$array_data, dat$schema)
+#'   rl <- rbind(rl, as.data.frame(rb))
 #' }
 #' summary(rl)
 #' }

@@ -5,7 +5,6 @@ rm -r -f \
    src/Makevars \
    tiledb.tar.gz \
    tiledbsoma.tar.gz \
-   libtiledbsoma.tar.gz \
    tiledb/ \
    tiledbsoma/ \
    inst/tiledb/ \
