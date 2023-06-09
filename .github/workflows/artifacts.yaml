@@ -43,7 +43,7 @@ jobs:
             ARTIFACT_OS: 'macos'
             ARTIFACT_ARCH: 'arm64'
           - environ: "linux"
-            imageName: "ubuntu-latest"
+            imageName: "manylinux2014"
             CMAKE_OSX_ARCHITECTURES: ""
             MACOSX_DEPLOYMENT_TARGET: ""
             ARTIFACT_OS: 'linux'
@@ -68,6 +68,9 @@ jobs:
             run: brew install pkg-config
             if: ${{ matrix.ARTIFACT_OS == 'macos' }}
 
+          - name: "Add cmake"
+            uses: lukka/get-cmake@latest
+            
           - name: "Check cmake"
             run: cmake --version
 
