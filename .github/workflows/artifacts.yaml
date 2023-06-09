@@ -43,7 +43,7 @@ jobs:
             ARTIFACT_OS: 'macos'
             ARTIFACT_ARCH: 'arm64'
           - environ: "linux"
-            imageName: "manylinux2014_x86_64"
+            imageName: "ubuntu-20.04"
             CMAKE_OSX_ARCHITECTURES: ""
             MACOSX_DEPLOYMENT_TARGET: ""
             ARTIFACT_OS: 'linux'
