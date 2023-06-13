@@ -1,10 +1,12 @@
 name: r-ci
 
 on:
-  pull_request:
-    paths-ignore:
-      - "apis/python/**"
-      - ".pre-commit-config.yaml"
+  workflow_dispatch:
+  workflow_call:
+  #pull_request:
+  #  paths-ignore:
+  #    - "apis/python/**"
+  #    - ".pre-commit-config.yaml"
   #push:
   #  branches: [main, master]
   #release:
@@ -14,7 +16,11 @@ env:
   COVERAGE_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
 jobs:
+  lib:
+    uses: ./.github/workflows/artifacts.yaml
+      
   ci:
+    needs: lib
     strategy:
       matrix:
         include:
