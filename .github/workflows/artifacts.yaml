@@ -1,6 +1,8 @@
 name: artifacts
 
 on:
+  workflow_dispatch:
+  workflow_call:
   #pull_request:
   #  paths-ignore:
   #    - "apis/python/**"
@@ -10,7 +12,7 @@ on:
   release:
     types:
       - created
-
+    
 env:
   ## for workflows triggered by release this is the release tag created (cf https://docs.github.com/en/actions/learn-github-actions/contexts)
   ## note that this is filtered below and then used via 'steps.versubstr.outputs.substring'
