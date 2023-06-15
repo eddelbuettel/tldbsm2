@@ -134,8 +134,8 @@ jobs:
           - name: "Artifact"
             uses: actions/upload-artifact@v3
             with:
-              name: libtiledbsoma-${{ matrix.ARTIFACT_OS }}-${{ matrix.ARTIFACT_ARCH }}-${{ env.TILEDBSOMA_VER }}-${{ env.TILEDBSOMA_SHA }}.tar.gz
-              path: libtiledbsoma-${{ matrix.ARTIFACT_OS }}-${{ matrix.ARTIFACT_ARCH }}-${{ env.TILEDBSOMA_VER }}-${{ env.TILEDBSOMA_SHA }}.tar.gz
+              name: libtiledbsoma-${{ matrix.ARTIFACT_OS }}-${{ matrix.ARTIFACT_ARCH }}-${{ steps.versubstr.outputs.substring }}-${{ steps.shasubstr.outputs.substring }}.tar.gz
+              path: libtiledbsoma-${{ matrix.ARTIFACT_OS }}-${{ matrix.ARTIFACT_ARCH }}-${{ steps.versubstr.outputs.substring }}-${{ steps.shasubstr.outputs.substring }}.tar.gz
 
           - name: "Release"
             uses: shogo82148/actions-upload-release-asset@v1
