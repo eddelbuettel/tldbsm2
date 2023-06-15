@@ -42,7 +42,7 @@ jobs:
           - name: coverage
             os: ubuntu-latest
             covr: 'yes'
-            arch_os: macos-x86_64
+            arch_os: linux-x86_64
 
     runs-on: ${{ matrix.os }}
 
