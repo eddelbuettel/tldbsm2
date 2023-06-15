@@ -7,8 +7,8 @@ on:
   #  paths-ignore:
   #    - "apis/python/**"
   #    - ".pre-commit-config.yaml"
-  #push:
-  #  branches: [main, master]
+  push:
+    branches: [main, master]
   #release:
 
 env:
@@ -16,6 +16,7 @@ env:
   COVERAGE_TOKEN: ${{ secrets.CODECOV_TOKEN }}
   ## for workflows triggered by release this is the release tag created (cf https://docs.github.com/en/actions/learn-github-actions/contexts)
   ## note that this is filtered below and then used via 'steps.versubstr.outputs.substring'
+  ## also note that in a non-release trigger the value is simply 'unset' (which still works for us)
   TILEDBSOMA_VER: "${{ github.ref }}"
   ## the commit sha that triggered the workflow (cf https://docs.github.com/en/actions/learn-github-actions/contexts)
   ## note that this is shortened below from the full-length sha1 sum to the common first seven letters, used via steps.shasubstr.outputs.substring
@@ -94,8 +95,8 @@ jobs:
         with:
           name: libtiledbsoma-${{ matrix.arch_os }}-${{ steps.versubstr.outputs.substring }}-${{ steps.shasubstr.outputs.substring }}.tar.gz
     
-      - name: Display downloaded file
-        run: ls -Rl
+      - name: Move downloaded file
+        run: mv -v libtiledbsoma-${{ matrix.arch_os }}-${{steps.versubstr.outputs.substring }}-${{steps.shasubstr.outputs.substring }}.tar.gz apis/r/libtiledbsoma.tar.gz
           
       - name: Test
         if: ${{ matrix.covr == 'no' }}
