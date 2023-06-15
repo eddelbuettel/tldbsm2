@@ -107,14 +107,16 @@ if [ ${force_artifacts} -ne 1 ]; then
         fi
     fi
 
-    if [ ${given_core} -eq 1 -a ${given_soma} -eq 1 ]; then
-        ## substitute them in (leaving @tiledb_rpath@ and @cxx17_macos@ alone for now)
-        sed -e "s|@tiledb_include@|${incl_dirs} |" \
-            -e "s|@tiledb_libs@|${lib_dirs} |" \
-            -e "s|@tiledb_rpath@||" \
-            -e "s|@cxx17_macos@|${macosver}|" \
-            src/Makevars.in > src/Makevars
-        exit 0
+    if [ ${given_core} -eq 1 ]; then
+        if [ ${given_soma} -eq 1 ]; then
+            ## substitute them in (leaving @tiledb_rpath@ and @cxx17_macos@ alone for now)
+            sed -e "s|@tiledb_include@|${incl_dirs} |" \
+                -e "s|@tiledb_libs@|${lib_dirs} |" \
+                -e "s|@tiledb_rpath@||" \
+                -e "s|@cxx17_macos@|${macosver}|" \
+                src/Makevars.in > src/Makevars
+            exit 0
+        fi
     fi
 
     ## There is a possible 'waterfall' effect here in that user may have tried to set

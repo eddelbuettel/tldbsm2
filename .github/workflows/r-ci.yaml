@@ -97,7 +97,13 @@ jobs:
     
       - name: Move downloaded file
         run: mv -v libtiledbsoma-${{ matrix.arch_os }}-${{steps.versubstr.outputs.substring }}-${{steps.shasubstr.outputs.substring }}.tar.gz apis/r/libtiledbsoma.tar.gz
-          
+
+      - name: Show files
+        run: ls -l apis/r/*.tar.gz
+
+      - name: Configure
+        run: cd apis/r && ./configure
+        
       - name: Test
         if: ${{ matrix.covr == 'no' }}
         run: cd apis/r && tools/r-ci.sh run_tests
