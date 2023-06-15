@@ -88,11 +88,11 @@ jobs:
 
       - name: "Show Substrings"
         run: echo "VER " ${{ steps.versubstr.outputs.substring }} " and SHA " ${{ steps.shasubstr.outputs.substring }}
-          
+       
       - name: Download artifact
         uses: actions/download-artifact@v3
         with:
-          name: libtiledbsoma-${{ matrix.ARTIFACT_OS }}-${{ matrix.ARTIFACT_ARCH }}-${{ steps.versubstr.outputs.substring }}-${{ steps.shasubstr.outputs.substring }}.tar.gz
+          name: libtiledbsoma-${{ matrix.arch_os }}-${{ steps.versubstr.outputs.substring }}-${{ steps.shasubstr.outputs.substring }}.tar.gz
     
       - name: Display downloaded file
         run: ls -Rl
