@@ -7,8 +7,8 @@ on:
   #  paths-ignore:
   #    - "apis/python/**"
   #    - ".pre-commit-config.yaml"
-  push:
-    branches: [main, master]
+  #push:
+  #  branches: [main, master]
   #release:
 
 env:
