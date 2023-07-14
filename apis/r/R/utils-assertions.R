@@ -1,3 +1,6 @@
+#' @importFrom rlang is_scalar_integerish is_scalar_logical is_scalar_character
+NULL
+
 #' Check if object is empty
 #' @noRd
 is_empty <- function(x) {
@@ -15,14 +18,6 @@ is_named <- function(x, allow_empty = TRUE) {
 
 is_named_list <- function(x) {
   is.list(x) && is_named(x)
-}
-
-is_scalar_logical <- function(x) {
-  is.logical(x) && length(x) == 1
-}
-
-is_scalar_character <- function(x) {
-  is.character(x) && length(x) == 1
 }
 
 is_character_or_null <- function(x) {
@@ -184,4 +179,31 @@ recursively_make_integer64 <- function(x) {
         warning("encountered ", class(x))
     }
     x
+}
+
+#' Warn if using a SOMADenseNDArray
+#' @param collection_name name of the SOMA collection
+#' @param layer a SOMASparseNDArray or SOMADenseNDArray
+#' @return Invisible logical indicating if the layer is sparse
+#' @references https://github.com/single-cell-data/TileDB-SOMA/issues/1245
+#' @noRd
+
+warn_if_dense <- function(collection_name, layer) {
+  stopifnot(
+    is_scalar_character(collection_name),
+    inherits(layer, "SOMASparseNDArray") || inherits(layer, "SOMADenseNDArray")
+  )
+  is_sparse <- inherits(layer, "SOMASparseNDArray")
+  if (!is_sparse) {
+    msg1 <- sprintf(
+      "Values for '%s' are encoded as dense instead of sparse\n",
+      basename(layer$uri)
+    )
+    msg2 <- sprintf(
+      "  - all '%s' arrays should be saved as 'SOMASparseNDArrays'\n",
+      collection_name
+    )
+    warning(msg1, msg2, call. = FALSE, immediate. = TRUE)
+  }
+  invisible(is_sparse)
 }

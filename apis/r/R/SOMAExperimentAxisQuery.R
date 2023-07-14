@@ -61,7 +61,7 @@ SOMAExperimentAxisQuery <- R6::R6Class(
       private$.indexer <- SOMAAxisIndexer$new(self)
     },
 
-    #' @description Retrieve obs [`arrow::Table`]
+    #' @description Retrieve obs \link{TableReadIter}
     #' @param column_names A character vector of column names to retrieve
     obs = function(column_names = NULL) {
       obs_query <- self$obs_query
@@ -69,7 +69,7 @@ SOMAExperimentAxisQuery <- R6::R6Class(
         coords = recursively_make_integer64(obs_query$coords),
         value_filter = obs_query$value_filter,
         column_names = column_names
-      )$concat()
+      )
     },
 
     #' @description Retrieve var [`arrow::Table`]
@@ -80,7 +80,7 @@ SOMAExperimentAxisQuery <- R6::R6Class(
         coords = recursively_make_integer64(var_query$coords),
         value_filter = var_query$value_filter,
         column_names = column_names
-      )$concat()
+      )
     },
 
     #' @description Retrieve `soma_joinids` as an [`arrow::Array`] for `obs`.
@@ -112,7 +112,7 @@ SOMAExperimentAxisQuery <- R6::R6Class(
       x_layer$read(coords = list(
         self$obs_joinids()$as_vector(),
         self$var_joinids()$as_vector()
-      ))$tables()$concat()
+      ))
     },
 
     #' @description Reads the entire query result as a list of
@@ -154,8 +154,8 @@ SOMAExperimentAxisQuery <- R6::R6Class(
       )
 
       # TODO: parallelize with futures
-      obs_ft <- self$obs(obs_column_names)
-      var_ft <- self$var(var_column_names)
+      obs_ft <- self$obs(obs_column_names)$concat()
+      var_ft <- self$var(var_column_names)$concat()
 
       x_matrices <- lapply(x_arrays, function(x_array) {
           x_array$read(coords = list(
@@ -169,6 +169,179 @@ SOMAExperimentAxisQuery <- R6::R6Class(
         obs = obs_ft, var = var_ft, X_layers = x_matrices
       )
     },
+
+    #' @description Retrieve a collection layer as a sparse matrix with named
+    #' dimensions.
+    #'
+    #' Load any layer from the `X`, `obsm`, `varm`, `obsp`, or `varp`
+    #' collections as a [sparse matrix][Matrix::sparseMatrix-class].
+    #'
+    #' By default the matrix dimensions are named using the `soma_joinid` values
+    #' in the specified layer's dimensions (e.g., `soma_dim_0`). However,
+    #' dimensions can be named using values from any `obs` or `var` column that
+    #' uniquely identifies each record by specifying the `obs_index` and
+    #' `var_index` arguments.
+    #'
+    #' For layers in \code{obsm} or \code{varm}, the column axis (the axis not
+    #' indexed by \dQuote{\code{obs}} or \dQuote{\code{var}}) is set to the
+    #' range of values present in \dQuote{\code{soma_dim_1}}; this ensures
+    #' that gaps in this axis are preserved (eg. when a query for
+    #' \dQuote{\code{obs}} that results in selecting entries that are all zero
+    #' for a given PC)
+    #'
+    #' @param collection The [`SOMACollection`] containing the layer of
+    #' interest, either: `"X"`, `"obsm"`, `"varm"`, `"obsp"`, or `"varp"`.
+    #' @param layer_name Name of the layer to retrieve from the `collection`.
+    #' @param obs_index,var_index Name of the column in `obs` or `var`
+    #' (`var_index`) containing values that should be used as dimension labels
+    #' in the resulting matrix. Whether the values are used as row or column
+    #' labels depends on the selected `collection`:
+    #'
+    #' | Collection | `obs_index`          | `var_index`          |
+    #' |-----------:|:---------------------|:---------------------|
+    #' | `X`        | row names            | column names         |
+    #' | `obsm`     | row names            | ignored              |
+    #' | `varm`     | ignored              | row names            |
+    #' | `obsp`     | row and column names | ignored              |
+    #' | `varp`     | ignored              | row and column names |
+    #' @return A [`Matrix::sparseMatrix-class`]
+    to_sparse_matrix = function(
+      collection, layer_name, obs_index = NULL, var_index = NULL
+    ) {
+      stopifnot(
+        assert_subset(
+          x = collection,
+          y = c("X", "obsm", "varm", "obsp", "varp"),
+          type = "collection"
+        ),
+
+        "Must specify a single layer name" = is_scalar_character(layer_name),
+        assert_subset(layer_name, self$ms[[collection]]$names(), "layer"),
+
+        "Must specify a single obs index" =
+          is.null(obs_index) || is_scalar_character(obs_index),
+        assert_subset(obs_index, self$obs_df$colnames(), "column"),
+
+        "Must specify a single var index" =
+          is.null(var_index) || is_scalar_character(var_index),
+        assert_subset(var_index, self$var_df$colnames(), "column")
+      )
+
+      # Retrieve and validate obs/var indices
+      obs_labels <- var_labels <- NULL
+      if (!is.null(obs_index)) {
+        if (collection %in% c("varm", "varp")) {
+          spdl::warn("The obs_index is ignored for {} collections", collection)
+        } else {
+          obs_labels <- self$obs(column_names = obs_index)$concat()[[1]]$as_vector()
+        }
+        stopifnot(
+          "All obs_index values must be unique" = anyDuplicated(obs_labels) == 0
+        )
+      }
+
+      if (!is.null(var_index)) {
+        if (collection %in% c("obsm", "obsp")) {
+          spdl::warn("The var_index is ignored for {} collections", collection)
+        } else {
+          var_labels <- self$var(column_names = var_index)$concat()[[1]]$as_vector()
+        }
+        stopifnot(
+          "All var_index values must be unique" = anyDuplicated(var_labels) == 0
+        )
+      }
+
+      # Construct coordinates
+      coords <- switch(collection,
+        X = list(
+          soma_dim_0 = self$obs_joinids(),
+          soma_dim_1 = self$var_joinids()
+        ),
+        obsm = list(
+          soma_dim_0 = self$obs_joinids()
+        ),
+        varm = list(
+          soma_dim_0 = self$var_joinids()
+        ),
+        obsp = list(
+          soma_dim_0 = self$obs_joinids(),
+          soma_dim_1 = self$obs_joinids()
+        ),
+        varp = list(
+          soma_dim_0 = self$var_joinids(),
+          soma_dim_1 = self$var_joinids()
+        )
+      )
+
+      # TODO: Coords must be vectors until read() supports arrow arrays
+      coords <- lapply(coords, function(x) x$as_vector())
+
+      # Retrieve coo arrow table with query result
+      layer <- self$ms[[collection]]$get(layer_name)
+      if (inherits(layer, "SOMADenseNDArray")) {
+        tbl <- layer$read_arrow_table(coords = coords)
+      } else {
+        tbl <- layer$read(coords = coords)$tables()$concat()
+      }
+
+
+      # Reindex the coordinates
+      # Constructing a matrix with the joinids produces a matrix with
+      # the same shape as the original array, which is not we want. To create
+      # a matrix containing only values in the query result we need to
+      # reindex the coordinates.
+      mat_coords <- switch(collection,
+        X = list(
+          i = self$indexer$by_obs(tbl$soma_dim_0),
+          j = self$indexer$by_var(tbl$soma_dim_1)
+        ),
+        obsm = list(
+          i = self$indexer$by_obs(tbl$soma_dim_0),
+          j = tbl$soma_dim_1
+        ),
+        varm = list(
+          i = self$indexer$by_var(tbl$soma_dim_0),
+          j = tbl$soma_dim_1
+        ),
+        obsp = list(
+          i = self$indexer$by_obs(tbl$soma_dim_0),
+          j = self$indexer$by_obs(tbl$soma_dim_1)
+        ),
+        varp = list(
+          i = self$indexer$by_var(tbl$soma_dim_0),
+          j = self$indexer$by_var(tbl$soma_dim_1)
+        )
+      )
+
+      # Construct the dimension names
+      dim_names <- switch(collection,
+        X = list(obs_labels, var_labels),
+        obsm = {
+          soma_dim_1 <- range(tbl$soma_dim_1$as_vector())
+          list(obs_labels, seq(min(soma_dim_1), max(soma_dim_1)))
+        },
+        varm = {
+          soma_dim_1 <- range(tbl$soma_dim_1$as_vector())
+          list(var_labels, seq(min(soma_dim_1), max(soma_dim_1)))
+        },
+        obsp = list(obs_labels, obs_labels),
+        varp = list(var_labels, var_labels)
+      )
+
+      # Use joinids if the dimension names are empty
+      dim_names <- Map("%||%", dim_names, coords)
+
+      Matrix::sparseMatrix(
+        i = mat_coords$i$as_vector(),
+        j = mat_coords$j$as_vector(),
+        x = tbl$soma_data$as_vector(),
+        index1 = FALSE,
+        dims = vapply_int(dim_names, length),
+        dimnames = dim_names,
+        repr = "T"
+      )
+    },
+
     #' @description Loads the query as a \code{\link[SeuratObject]{Seurat}} object
     #'
     #' @template param-x-layers-v3
@@ -231,7 +404,7 @@ SOMAExperimentAxisQuery <- R6::R6Class(
           arg = obs_index,
           choices = self$obs_df$attrnames()
         )
-        self$obs(obs_index)$GetColumnByName(obs_index)$as_vector()
+        self$obs(obs_index)$concat()$GetColumnByName(obs_index)$as_vector()
       }
       # Load in the assay
       assay <- self$to_seurat_assay(
@@ -254,7 +427,7 @@ SOMAExperimentAxisQuery <- R6::R6Class(
       )
       if (!(isFALSE(obs_column_names) || rlang::is_na(obs_column_names))) {
         obs <- as.data.frame(
-          x = self$obs(obs_column_names)$to_data_frame()
+          x = self$obs(obs_column_names)$concat()$to_data_frame()
         )
         row.names(obs) <- cells
         object[[names(obs)]] <- obs
@@ -410,7 +583,7 @@ SOMAExperimentAxisQuery <- R6::R6Class(
           arg = var_index,
           choices = self$var_df$attrnames()
         )
-        self$var(var_index)$GetColumnByName(var_index)$as_vector()
+        self$var(var_index)$concat()$GetColumnByName(var_index)$as_vector()
       }
       cells <- if (is.null(obs_index)) {
         paste0('cell', self$obs_joinids()$as_vector())
@@ -419,7 +592,7 @@ SOMAExperimentAxisQuery <- R6::R6Class(
           arg = obs_index,
           choices = self$obs_df$attrnames()
         )
-        self$obs(obs_index)$GetColumnByName(obs_index)$as_vector()
+        self$obs(obs_index)$concat()$GetColumnByName(obs_index)$as_vector()
       }
       # Check the layers
       assert_subset(x = X_layers, y = self$ms$X$names(), type = 'X_layer')
@@ -455,7 +628,7 @@ SOMAExperimentAxisQuery <- R6::R6Class(
         y = var_index
       )
       if (!(isFALSE(var_column_names) || rlang::is_na(var_column_names))) {
-        var <- as.data.frame(self$var(var_column_names)$to_data_frame())
+        var <- as.data.frame(self$var(var_column_names)$concat()$to_data_frame())
         row.names(var) <- features
         obj[[names(var)]] <- var
       }
@@ -493,6 +666,7 @@ SOMAExperimentAxisQuery <- R6::R6Class(
         "'var_index' must be a single character value" = is.null(var_index) ||
           (is_scalar_character(var_index) && !is.na(var_index))
       )
+
       # Check embeddings/loadings
       ms_embed <- tryCatch(expr = self$ms$obsm$names(), error = null)
       ms_load <- tryCatch(expr = self$ms$varm$names(), error = null)
@@ -518,6 +692,7 @@ SOMAExperimentAxisQuery <- R6::R6Class(
       } else {
         names(ms_load) <- .anndata_to_seurat_reduc(ms_load, 'loadings')
       }
+
       # Check provided names
       assert_subset(
         x = obsm_layer,
@@ -574,115 +749,67 @@ SOMAExperimentAxisQuery <- R6::R6Class(
       if (obsm_layer %in% names(ms_embed)) {
         obsm_layer <- ms_embed[obsm_layer]
       }
-      # Get cell names
-      cells <- if (is.null(obs_index)) {
-        paste0('cell', self$obs_joinids()$as_vector())
-      } else {
-        obs_index <- match.arg(
-          arg = obs_index,
-          choices = self$obs_df$attrnames()
-        )
-        self$obs(obs_index)$GetColumnByName(obs_index)$as_vector()
-      }
-      embed <- self$ms$obsm$get(obsm_layer)
-      coords <- list(
-        cells = self$obs_joinids()$as_vector(),
-        dims = seq_len(as.integer(embed$shape()[2L])) - 1L
+
+      spdl::info("Reading obsm layer '{}' into memory", obsm_layer)
+      warn_if_dense("obsm", self$ms$obsm$get(obsm_layer))
+      embed_mat <- self$to_sparse_matrix(
+        collection = "obsm",
+        layer_name = obsm_layer,
+        obs_index = obs_index
       )
-      embed_mat <- if (inherits(embed, 'SOMASparseNDArray')) {
-        this_mat <- embed$read()$sparse_matrix(zero_based=TRUE)$concat()
-        this_mat <- this_mat$take(coords$cells, coords$dims)
-        this_mat <- this_mat$get_one_based_matrix()
-        this_mat <- as(this_mat, "CsparseMatrix")
-        as.matrix(this_mat)
-      } else if (inherits(embed, 'SOMADenseNDArray')) {
-        warning(
-          paste(
-            strwrap(paste(
-              "Embeddings for",
-              sQuote(obsm_layer),
-              "are encoded as dense instead of sparse; all arrays should be saved as",
-              sQuote('SOMASparseNDArrays')
-            )),
-            collapse = '\n'
-          ),
-          call. = FALSE
-        )
-        embed$read_dense_matrix(unname(coords))
-      } else {
-        stop("Unknown SOMA Array type: ", class(embed)[1L], call. = FALSE)
-      }
+
       # Set matrix names
-      rownames(embed_mat) <- cells
+      if (is.null(obs_index)) {
+        rownames(embed_mat) <- paste0("cell", rownames(embed_mat))
+      }
       colnames(embed_mat) <- paste0(key, seq_len(ncol(embed_mat)))
+      spdl::debug("Converting '{}' dgTMatrix to matrix", obsm_layer)
+      embed_mat <- as.matrix(embed_mat)
+
       # Autoset loadings if needed
       if (is.null(varm_layer) || isTRUE(varm_layer)) {
         if (seurat %in% c(names(ms_load), ms_load)) {
           varm_layer <- seurat
         }
       }
-      # Read in feature loadings
+
+      # Read in feature loadings (if present)
+      load_mat <- NULL
       if (is_scalar_character(varm_layer)) {
         # Translate Seurat name to AnnData name
         if (varm_layer %in% names(ms_load)) {
           varm_layer <- ms_load[varm_layer]
         }
-        # Get feature names
-        features <- if (is.null(var_index)) {
-          paste0('feature', self$var_joinids()$as_vector())
-        } else {
-          var_index <- match.arg(
-            arg = var_index,
-            choices = self$var_df$attrnames()
-          )
-          self$var(var_index)$GetColumnByName(var_index)$as_vector()
-        }
-        loads <- self$ms$varm$get(varm_layer)
-        coords <- list(
-          features = self$var_joinids()$as_vector(),
-          dims = seq_len(as.integer(loads$shape()[2L])) - 1L
+
+        spdl::info("Reading varm layer '{}' into memory", varm_layer)
+        warn_if_dense("varm", self$ms$varm$get(varm_layer))
+        load_mat <- self$to_sparse_matrix(
+          collection = "varm",
+          layer_name = varm_layer,
+          var_index = var_index
         )
-        load_mat <- if (inherits(loads, 'SOMASparseNDArray')) {
-          this_mat <- loads$read()$sparse_matrix(zero_based=TRUE)$concat()
-          this_mat <- this_mat$take(coords$features, coords$dims)
-          this_mat <- this_mat$get_one_based_matrix()
-          this_mat <- as(this_mat, "CsparseMatrix")
-          as.matrix(this_mat)
-        } else if (inherits(loads, 'SOMADenseNDArray')) {
-          warning(
-            paste(
-              strwrap(paste(
-                "Loadings for",
-                sQuote(varm_layer),
-                "are encoded as dense instead of sparse; all arrays should be saved as",
-                sQuote('SOMASparseNDArrays')
-              )),
-              collapse = '\n'
-            ),
-            call. = FALSE,
-            immediate. = TRUE
-          )
-          loads$read_dense_matrix(unname(coords))
-        } else {
-          stop("Unknown SOMA Array type: ", class(loads)[1L], call. = FALSE)
-        }
+
         # Set matrix names
-        rownames(load_mat) <- features
+        if (is.null(var_index)) {
+          rownames(load_mat) <- paste0('feature', rownames(load_mat))
+        }
         colnames(load_mat) <- paste0(key, seq_len(ncol(load_mat)))
+        spdl::debug("Converting '{}' dgTMatrix to matrix", varm_layer)
+        load_mat <- as.matrix(load_mat)
+
         if (!is.null(embed_mat) && ncol(load_mat) != ncol(embed_mat)) {
           stop("The loadings do not match the embeddings", call. = FALSE)
         }
-      } else {
-        load_mat <- NULL
       }
+
       # Create the DimReduc
-      return(SeuratObject::CreateDimReducObject(
+      SeuratObject::CreateDimReducObject(
         embeddings = embed_mat,
         loadings = load_mat %||% methods::new('matrix'),
         assay = private$.measurement_name,
         global = !seurat %in% c('pca', 'ica'),
         key = key
-      ))
+      )
     },
     #' @description Loads the query as a Seurat \link[SeuratObject:Graph]{graph}
     #'
@@ -712,21 +839,22 @@ SOMAExperimentAxisQuery <- R6::R6Class(
       }
       # Check provided graph name
       obsp_layer <- match.arg(arg = obsp_layer, choices = ms_graph)
-      mat <- self$ms$obsp$get(obsp_layer)$read()$sparse_matrix(zero_based=TRUE)$concat()$get_one_based_matrix()
-      mat <- as(mat, "CsparseMatrix")
-      idx <- self$obs_joinids()$as_vector() + 1L
-      mat <- mat[idx, idx]
-      mat <- as(mat, 'Graph')
-      cells <- if (is.null(obs_index)) {
-        paste0('cell', self$obs_joinids()$as_vector())
-      } else {
-        obs_index <- match.arg(
-          arg = obs_index,
-          choices = self$obs_df$attrnames()
-        )
-        self$obs(obs_index)$GetColumnByName(obs_index)$as_vector()
+
+      # Retrieve the named TsparseMatrix
+      mat <- self$to_sparse_matrix(
+        collection = "obsp",
+        layer_name = obsp_layer,
+        obs_index = obs_index
+      )
+
+      # Convert to Seurat graph by way of a CsparseMatrix
+      mat <- as(as(mat, "CsparseMatrix"), "Graph")
+
+      if (is.null(obs_index)) {
+        dimnames(mat) <- lapply(dimnames(mat), function(x) paste0("cell", x))
+
       }
-      dimnames(mat) <- list(cells, cells)
+
       SeuratObject::DefaultAssay(mat) <- private$.measurement_name
       validObject(mat)
       return(mat)
@@ -854,8 +982,9 @@ SOMAExperimentAxisQuery <- R6::R6Class(
       dnames <- list(features, cells)
       # Read in `data` slot
       if (is_scalar_character(data)) {
+        # TODO: potentially replace with public$to_sparse_matrix()
         dmat <- private$.as_matrix(
-          table = self$X(data),
+          table = self$X(data)$tables()$concat(),
           repr = 'C',
           transpose = TRUE
         )
@@ -865,7 +994,7 @@ SOMAExperimentAxisQuery <- R6::R6Class(
       # Add the `counts` slot
       if (is_scalar_character(counts)) {
         cmat <- private$.as_matrix(
-          table = self$X(counts),
+          table = self$X(counts)$tables()$concat(),
           repr = 'C',
           transpose = TRUE
         )
@@ -883,7 +1012,7 @@ SOMAExperimentAxisQuery <- R6::R6Class(
       # Add the `scale.data` slot
       if (is_scalar_character(scale_data)) {
         smat <- private$.as_matrix(
-          table = self$X(scale_data),
+          table = self$X(scale_data)$tables()$concat(),
           repr = 'D',
           transpose = TRUE
         )
