@@ -41,8 +41,16 @@ using namespace tiledb;
 //= public static
 //===================================================================
 
-void SOMAArray::create(std::string_view uri, ArraySchema schema) {
+void SOMAArray::create(
+    std::shared_ptr<Context> ctx,
+    std::string_view uri,
+    ArraySchema schema,
+    std::string soma_object_type) {
     Array::create(std::string(uri), schema);
+    auto array = Array(*ctx, std::string(uri), TILEDB_WRITE);
+    array.put_metadata(
+        "soma_object_type", TILEDB_STRING_UTF8, 1, soma_object_type.c_str());
+    array.close();
 }
 
 std::unique_ptr<SOMAArray> SOMAArray::open(
@@ -97,6 +105,22 @@ SOMAArray::SOMAArray(
     tiledb_query_type_t mode,
     std::string_view uri,
     std::string_view name,
+    std::map<std::string, std::string> platform_config,
+    std::vector<std::string> column_names,
+    std::string_view batch_size,
+    std::string_view result_order,
+    std::optional<std::pair<uint64_t, uint64_t>> timestamp)
+    : uri_(util::rstrip_uri(uri))
+    , timestamp_(timestamp) {
+    ctx_ = std::make_shared<Context>(Config(platform_config));
+    validate(mode, name, timestamp);
+    reset(column_names, batch_size, result_order);
+}
+
+SOMAArray::SOMAArray(
+    tiledb_query_type_t mode,
+    std::string_view uri,
+    std::string_view name,
     std::shared_ptr<Context> ctx,
     std::vector<std::string> column_names,
     std::string_view batch_size,
@@ -105,32 +129,17 @@ SOMAArray::SOMAArray(
     : ctx_(ctx)
     , uri_(util::rstrip_uri(uri))
     , timestamp_(timestamp) {
-    // Validate parameters
-    try {
-        LOG_DEBUG(fmt::format("[SOMAArray] opening array '{}'", uri_));
-        arr_ = std::make_shared<Array>(*ctx_, uri_, mode);
-        if (timestamp) {
-            if (timestamp->first > timestamp->second) {
-                throw std::invalid_argument("timestamp start > end");
-            }
-            arr_->set_open_timestamp_start(timestamp->first);
-            arr_->set_open_timestamp_end(timestamp->second);
-            arr_->close();
-            arr_->open(mode);
-            LOG_DEBUG(fmt::format(
-                "[SOMAArray] timestamp_start = {}",
-                arr_->open_timestamp_start()));
-            LOG_DEBUG(fmt::format(
-                "[SOMAArray] timestamp_end = {}", arr_->open_timestamp_end()));
-        }
-        mq_ = std::make_unique<ManagedQuery>(arr_, name);
-    } catch (const std::exception& e) {
-        throw TileDBSOMAError(
-            fmt::format("Error opening array: '{}'\n  {}", uri_, e.what()));
-    }
-
+    validate(mode, name, timestamp);
     reset(column_names, batch_size, result_order);
 }
+
+const std::string& SOMAArray::uri() const {
+    return uri_;
+};
+
+std::shared_ptr<Context> SOMAArray::ctx() {
+    return ctx_;
+};
 
 void SOMAArray::open(
     tiledb_query_type_t mode,
@@ -432,6 +441,19 @@ std::vector<int64_t> SOMAArray::shape() {
     return result;
 }
 
+uint64_t SOMAArray::ndim() const {
+    return this->schema().get()->domain().ndim();
+}
+
+std::vector<std::string> SOMAArray::dimension_names() const {
+    std::vector<std::string> result;
+    auto dimensions = this->schema().get()->domain().dimensions();
+    for (const auto& dim : dimensions) {
+        result.push_back(dim.name());
+    }
+    return result;
+}
+
 void SOMAArray::set_metadata(
     const std::string& key,
     tiledb_datatype_t value_type,
@@ -468,6 +490,35 @@ bool SOMAArray::has_metadata(const std::string& key) {
 
 uint64_t SOMAArray::metadata_num() const {
     return arr_->metadata_num();
+}
+
+void SOMAArray::validate(
+    tiledb_query_type_t mode,
+    std::string_view name,
+    std::optional<std::pair<uint64_t, uint64_t>> timestamp) {
+    // Validate parameters
+    try {
+        LOG_DEBUG(fmt::format("[SOMAArray] opening array '{}'", uri_));
+        arr_ = std::make_shared<Array>(*ctx_, uri_, mode);
+        if (timestamp) {
+            if (timestamp->first > timestamp->second) {
+                throw std::invalid_argument("timestamp start > end");
+            }
+            arr_->set_open_timestamp_start(timestamp->first);
+            arr_->set_open_timestamp_end(timestamp->second);
+            arr_->close();
+            arr_->open(mode);
+            LOG_DEBUG(fmt::format(
+                "[SOMAArray] timestamp_start = {}",
+                arr_->open_timestamp_start()));
+            LOG_DEBUG(fmt::format(
+                "[SOMAArray] timestamp_end = {}", arr_->open_timestamp_end()));
+        }
+        mq_ = std::make_unique<ManagedQuery>(arr_, name);
+    } catch (const std::exception& e) {
+        throw TileDBSOMAError(
+            fmt::format("Error opening array: '{}'\n  {}", uri_, e.what()));
+    }
 }
 
 }  // namespace tiledbsoma
