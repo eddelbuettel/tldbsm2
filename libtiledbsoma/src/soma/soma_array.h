@@ -38,7 +38,8 @@
 #include <future>
 
 #include <tiledb/tiledb>
-
+#include <tiledb/tiledb_experimental>
+#include "enums.h"
 #include "managed_query.h"
 
 namespace tiledbsoma {
@@ -56,57 +57,63 @@ class SOMAArray {
      * @param ctx TileDB context
      * @param uri URI to create the SOMAArray
      * @param schema TileDB ArraySchema
+     * @param soma_type SOMADataFrame, SOMADenseNDArray, or
+     * SOMASparseNDArray
      */
     static void create(
         std::shared_ptr<Context> ctx,
         std::string_view uri,
         ArraySchema schema,
-        std::string soma_object_type);
+        std::string soma_type);
 
     /**
      * @brief Open an array at the specified URI and return SOMAArray
      * object.
      *
-     * @param mode TILEDB_READ or TILEDB_WRITE
+     * @param mode read or write
      * @param uri URI of the array
      * @param name Name of the array
      * @param platform_config Config parameter dictionary
      * @param column_names Columns to read
      * @param batch_size Read batch size
-     * @param result_order Read result order
+     * @param result_order Read result order: automatic (default), rowmajor,
+     * or colmajor
+     * @param timestamp Optional pair indicating timestamp start and end
      * @return std::unique_ptr<SOMAArray> SOMAArray
      */
     static std::unique_ptr<SOMAArray> open(
-        tiledb_query_type_t mode,
+        OpenMode mode,
         std::string_view uri,
         std::string_view name = "unnamed",
         std::map<std::string, std::string> platform_config = {},
         std::vector<std::string> column_names = {},
         std::string_view batch_size = "auto",
-        std::string_view result_order = "auto",
+        ResultOrder result_order = ResultOrder::automatic,
         std::optional<std::pair<uint64_t, uint64_t>> timestamp = std::nullopt);
 
     /**
      * @brief Open an array at the specified URI and return SOMAArray
      * object.
      *
-     * @param mode TILEDB_READ or TILEDB_WRITE
+     * @param mode read or write
      * @param ctx TileDB context
      * @param uri URI of the array
      * @param name Name of the array
      * @param column_names Columns to read
      * @param batch_size Read batch size
-     * @param result_order Read result order
+     * @param result_order Read result order: automatic (default), rowmajor,
+     * or colmajor
+     * @param timestamp Optional pair indicating timestamp start and end
      * @return std::unique_ptr<SOMAArray> SOMAArray
      */
     static std::unique_ptr<SOMAArray> open(
-        tiledb_query_type_t mode,
+        OpenMode mode,
         std::shared_ptr<Context> ctx,
         std::string_view uri,
         std::string_view name = "unnamed",
         std::vector<std::string> column_names = {},
         std::string_view batch_size = "auto",
-        std::string_view result_order = "auto",
+        ResultOrder result_order = ResultOrder::automatic,
         std::optional<std::pair<uint64_t, uint64_t>> timestamp = std::nullopt);
 
     //===================================================================
@@ -116,7 +123,7 @@ class SOMAArray {
     /**
      * @brief Construct a new SOMAArray object
      *
-     * @param mode TILEDB_READ or TILEDB_WRITE
+     * @param mode read or write
      * @param uri URI of the array
      * @param name name of the array
      * @param platform_config Config parameter dictionary
@@ -126,35 +133,36 @@ class SOMAArray {
      * @param timestamp Timestamp
      */
     SOMAArray(
-        tiledb_query_type_t mode,
+        OpenMode mode,
         std::string_view uri,
         std::string_view name,
         std::map<std::string, std::string> platform_config,
         std::vector<std::string> column_names,
         std::string_view batch_size,
-        std::string_view result_order,
+        ResultOrder result_order,
         std::optional<std::pair<uint64_t, uint64_t>> timestamp = std::nullopt);
 
     /**
      * @brief Construct a new SOMAArray object
      *
-     * @param mode TILEDB_READ or TILEDB_WRITE
+     * @param mode read or write
      * @param uri URI of the array
      * @param name name of the array
      * @param ctx TileDB context
      * @param column_names Columns to read
      * @param batch_size Batch size
-     * @param result_order Result order
+     * @param result_order Read result order: automatic (default), rowmajor,
+     * or colmajor
      * @param timestamp Timestamp
      */
     SOMAArray(
-        tiledb_query_type_t mode,
+        OpenMode mode,
         std::string_view uri,
         std::string_view name,
         std::shared_ptr<Context> ctx,
         std::vector<std::string> column_names,
         std::string_view batch_size,
-        std::string_view result_order,
+        ResultOrder result_order,
         std::optional<std::pair<uint64_t, uint64_t>> timestamp = std::nullopt);
 
     SOMAArray() = delete;
@@ -170,26 +178,35 @@ class SOMAArray {
     const std::string& uri() const;
 
     /**
-     * @brief Get URI of the SOMAArray.
+     * @brief Get Ctx of the SOMAArray.
      *
-     * @return std::string URI
+     * @return std::shared_ptr<Context>
      */
     std::shared_ptr<Context> ctx();
 
     /**
      * Open the SOMAArray object.
      *
-     * @param mode TILEDB_READ or TILEDB_WRITE
+     * @param mode read or write
      * @param timestamp Timestamp
      */
     void open(
-        tiledb_query_type_t mode,
+        OpenMode mode,
         std::optional<std::pair<uint64_t, uint64_t>> timestamp = std::nullopt);
 
     /**
      * Close the SOMAArray object.
      */
     void close();
+
+    /**
+     * Check if the SOMAArray is open.
+     *
+     * @return bool true if open
+     */
+    bool is_open() const {
+        return arr_->is_open();
+    }
 
     /**
      * @brief Reset the state of this SOMAArray object to prepare for a
@@ -202,7 +219,7 @@ class SOMAArray {
     void reset(
         std::vector<std::string> column_names = {},
         std::string_view batch_size = "auto",
-        std::string_view result_order = "auto");
+        ResultOrder result_order = ResultOrder::automatic);
 
     /**
      * @brief Set the dimension slice using one point
@@ -219,8 +236,8 @@ class SOMAArray {
     }
 
     /**
-     * @brief Set the dimension slice using multiple points, with support for
-     * partitioning.
+     * @brief Set the dimension slice using multiple points, with support
+     * for partitioning.
      *
      * @tparam T
      * @param dim
@@ -314,12 +331,14 @@ class SOMAArray {
 
     /**
      * @brief Select columns names to query (dim and attr). If the
-     * `if_not_empty` parameter is `true`, the column will be selected iff the
-     * list of selected columns is empty. This prevents a `select_columns` call
-     * from changing an empty list (all columns) to a subset of columns.
+     * `if_not_empty` parameter is `true`, the column will be selected iff
+     * the list of selected columns is empty. This prevents a
+     * `select_columns` call from changing an empty list (all columns) to a
+     * subset of columns.
      *
      * @param names Vector of column names
-     * @param if_not_empty Prevent changing an "empty" selection of all columns
+     * @param if_not_empty Prevent changing an "empty" selection of all
+     * columns
      */
     void select_columns(
         const std::vector<std::string>& names, bool if_not_empty = false) {
@@ -333,8 +352,8 @@ class SOMAArray {
     void submit();
 
     /**
-     * @brief Read the next chunk of results from the query. If all results have
-     * already been read, std::nullopt is returned.
+     * @brief Read the next chunk of results from the query. If all results
+     * have already been read, std::nullopt is returned.
      *
      * An example use model:
      *
@@ -373,8 +392,9 @@ class SOMAArray {
      *
      *   auto schema = *soma_array->schema();
      *   auto array_buffer = std::make_shared<ArrayBuffers>();
-     *   array_buffer->emplace("att", ColumnBuffer::create(schema, "att", att));
-     *   array_buffer->emplace("dim", ColumnBuffer::create(schema, "dim", dim));
+     *   array_buffer->emplace("att", ColumnBuffer::create(schema, "att",
+     * att)); array_buffer->emplace("dim", ColumnBuffer::create(schema,
+     * "dim", dim));
      *
      *   std::vector<int> x(10, 1);
      *   writer->submit();
@@ -392,8 +412,8 @@ class SOMAArray {
      * complete.
      *
      * If `query_status_only` is false, return true if the query status
-     * is complete or if the query is empty (no ranges have been added to the
-     * query).
+     * is complete or if the query is empty (no ranges have been added to
+     * the query).
      *
      * @param query_status_only Query complete mode.
      * @return true if the query is complete, as described above
@@ -472,6 +492,27 @@ class SOMAArray {
     std::vector<std::string> dimension_names() const;
 
     /**
+     * @brief Get the mapping of attributes to Enumerations.
+     *
+     * @return std::map<std::string, Enumeration>
+     */
+    std::map<std::string, Enumeration> get_attr_to_enum_mapping();
+
+    /**
+     * @brief Get the Enumeration name associated with the given Attr.
+     *
+     * @return std::optional<std::string> The enumeration name if one exists.
+     */
+    std::optional<std::string> get_enum_label_on_attr(std::string attr_name);
+
+    /**
+     * @brief Check if the given attribute has an associated enumeration.
+     *
+     * @return bool
+     */
+    bool attr_has_enum(std::string attr_name);
+
+    /**
      * Set metadata key-value items to an open array. The array must
      * opened in WRITE mode, otherwise the function will error out.
      *
@@ -506,10 +547,12 @@ class SOMAArray {
 
     /**
      * @brief Given a key, get the associated value datatype, number of
-     * values, and value in binary form. The array must be opened in READ mode,
+     * values, and value in binary form. The array must be opened in READ
+     mode,
      * otherwise the function will error out.
      *
-     * The value may consist of more than one items of the same datatype. Keys
+     * The value may consist of more than one items of the same datatype.
+     Keys
      * that do not exist in the metadata will be return NULL for the value.
      *
      * **Example:**
@@ -525,30 +568,28 @@ class SOMAArray {
      int32_t*)std::get<MetadataInfo::value>(meta_val));
      * @endcode
      *
-     * @param key The key of the metadata item to be retrieved. UTF-8 encodings
+     * @param key The key of the metadata item to be retrieved. UTF-8
+     encodings
      *     are acceptable.
      * @return MetadataValue (std::tuple<std::string, tiledb_datatype_t,
      * uint32_t, const void*>)
      */
-    MetadataValue get_metadata(const std::string& key) const;
+    std::optional<MetadataValue> get_metadata(const std::string& key);
 
     /**
-     * @brief Given an index, get the associated value datatype, number of
-     * values, and value in binary form. The array must be opened in READ mode,
-     * otherwise the function will error out.
+     * Get a mapping of all metadata keys with its associated value datatype,
+     * number of values, and value in binary form.
      *
-     * @param index The index used to get the metadata.
-     * @return MetadataValue (std::tuple<std::string, tiledb_datatype_t,
-     * uint32_t, const void*>)
+     * @return std::map<std::string, MetadataValue>
      */
-    MetadataValue get_metadata(uint64_t index) const;
+    std::map<std::string, MetadataValue> get_metadata();
 
     /**
-     * Check if the key exists in metadata from an open array. The array must
-     * be opened in READ mode, otherwise the function will error out.
+     * Check if the key exists in metadata from an open array. The array
+     * must be opened in READ mode, otherwise the function will error out.
      *
-     * @param key The key of the metadata item to be checked. UTF-8 encodings
-     *     are acceptable.
+     * @param key The key of the metadata item to be checked. UTF-8
+     * encodings are acceptable.
      * @return true if the key exists, else false.
      */
     bool has_metadata(const std::string& key);
@@ -563,14 +604,24 @@ class SOMAArray {
      * Validates input parameters before opening array.
      */
     void validate(
-        tiledb_query_type_t mode,
+        OpenMode mode,
         std::string_view name,
         std::optional<std::pair<uint64_t, uint64_t>> timestamp);
+
+    /**
+     * Return optional timestamp pair SOMAArray was opened with.
+     */
+    std::optional<std::pair<uint64_t, uint64_t>> timestamp();
 
    private:
     //===================================================================
     //= private non-static
     //===================================================================
+
+    /**
+     * Fills the metadata cache upon opening the array.
+     */
+    void fill_metadata_cache();
 
     // TileDB context
     std::shared_ptr<Context> ctx_;
@@ -582,7 +633,10 @@ class SOMAArray {
     std::string batch_size_;
 
     // Result order
-    std::string result_order_;
+    ResultOrder result_order_;
+
+    // Metadata cache
+    std::map<std::string, MetadataValue> metadata_;
 
     // Read timestamp range (start, end)
     std::optional<std::pair<uint64_t, uint64_t>> timestamp_;

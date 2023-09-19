@@ -30,10 +30,11 @@
  *   This file defines the SOMADataFrame class.
  */
 
-#include "soma_dataframe.h"
+#include <filesystem>
+
 #include <tiledb/tiledb>
 #include "array_buffers.h"
-#include "soma_array.h"
+#include "soma_dataframe.h"
 
 namespace tiledbsoma {
 using namespace tiledb;
@@ -43,31 +44,44 @@ using namespace tiledb;
 //===================================================================
 
 std::unique_ptr<SOMADataFrame> SOMADataFrame::create(
-    std::shared_ptr<Context> ctx, std::string_view uri, ArraySchema schema) {
+    std::string_view uri,
+    ArraySchema schema,
+    std::map<std::string, std::string> platform_config) {
+    return SOMADataFrame::create(
+        uri, schema, std::make_shared<Context>(Config(platform_config)));
+}
+
+std::unique_ptr<SOMADataFrame> SOMADataFrame::create(
+    std::string_view uri, ArraySchema schema, std::shared_ptr<Context> ctx) {
     SOMAArray::create(ctx, uri, schema, "SOMADataFrame");
-    return std::make_unique<SOMADataFrame>(
-        TILEDB_READ, uri, ctx, std::vector<std::string>(), std::nullopt);
+    return SOMADataFrame::open(uri, OpenMode::read, ctx);
 }
 
 std::unique_ptr<SOMADataFrame> SOMADataFrame::open(
-    tiledb_query_type_t mode,
     std::string_view uri,
-    std::vector<std::string> column_names,
+    OpenMode mode,
     std::map<std::string, std::string> platform_config,
+    std::vector<std::string> column_names,
+    ResultOrder result_order,
     std::optional<std::pair<uint64_t, uint64_t>> timestamp) {
-    auto ctx = std::make_shared<Context>(Config(platform_config));
-    return std::make_unique<SOMADataFrame>(
-        mode, uri, ctx, column_names, timestamp);
+    return SOMADataFrame::open(
+        uri,
+        mode,
+        std::make_shared<Context>(Config(platform_config)),
+        column_names,
+        result_order,
+        timestamp);
 }
 
 std::unique_ptr<SOMADataFrame> SOMADataFrame::open(
-    tiledb_query_type_t mode,
-    std::shared_ptr<Context> ctx,
     std::string_view uri,
+    OpenMode mode,
+    std::shared_ptr<Context> ctx,
     std::vector<std::string> column_names,
+    ResultOrder result_order,
     std::optional<std::pair<uint64_t, uint64_t>> timestamp) {
     return std::make_unique<SOMADataFrame>(
-        mode, uri, ctx, column_names, timestamp);
+        mode, uri, ctx, column_names, result_order, timestamp);
 }
 
 //===================================================================
@@ -75,27 +89,28 @@ std::unique_ptr<SOMADataFrame> SOMADataFrame::open(
 //===================================================================
 
 SOMADataFrame::SOMADataFrame(
-    tiledb_query_type_t mode,
+    OpenMode mode,
     std::string_view uri,
     std::shared_ptr<Context> ctx,
     std::vector<std::string> column_names,
+    ResultOrder result_order,
     std::optional<std::pair<uint64_t, uint64_t>> timestamp) {
+    std::string array_name = std::filesystem::path(uri).filename();
     array_ = std::make_shared<SOMAArray>(
         mode,
         uri,
-        "unnamed",  // name
+        array_name,  // label used when debugging
         ctx,
         column_names,
         "auto",  // batch_size,
-        "auto",  // result_order,
+        result_order,
         timestamp);
     array_->reset();
     array_->submit();
 }
 
 void SOMADataFrame::open(
-    tiledb_query_type_t mode,
-    std::optional<std::pair<uint64_t, uint64_t>> timestamp) {
+    OpenMode mode, std::optional<std::pair<uint64_t, uint64_t>> timestamp) {
     array_->open(mode, timestamp);
     array_->reset();
     array_->submit();
@@ -105,7 +120,11 @@ void SOMADataFrame::close() {
     array_->close();
 }
 
-const std::string& SOMADataFrame::uri() const {
+bool SOMADataFrame::is_open() const {
+    return array_->is_open();
+}
+
+const std::string SOMADataFrame::uri() const {
     return array_->uri();
 }
 

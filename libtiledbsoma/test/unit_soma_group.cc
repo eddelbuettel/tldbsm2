@@ -154,35 +154,41 @@ TEST_CASE("SOMAGroup: basic") {
     auto ctx = std::make_shared<Context>();
 
     std::string uri_main_group = "mem://main-group";
-    Group::create(*ctx, uri_main_group);
+    SOMAGroup::create(ctx, uri_main_group, "NONE");
 
     std::string uri_sub_group = "mem://sub-group";
-    Group::create(*ctx, uri_sub_group);
+    SOMAGroup::create(ctx, uri_sub_group, "NONE");
 
     auto [uri_sub_array, expected_nnz] = create_array("mem://sub-array", *ctx);
 
     auto soma_group = SOMAGroup::open(
-        TILEDB_WRITE, ctx, uri_main_group, "metadata", 1);
-    soma_group->add_member(uri_sub_group, false, "subgroup");
-    soma_group->add_member(uri_sub_array, false, "subarray");
+        OpenMode::write,
+        ctx,
+        uri_main_group,
+        "metadata",
+        std::pair<uint64_t, uint64_t>(0, 1));
+    soma_group->add_member(uri_sub_group, URIType::absolute, "subgroup");
+    soma_group->add_member(uri_sub_array, URIType::absolute, "subarray");
     soma_group->close();
 
-    soma_group->open(TILEDB_READ, 1);
+    std::map<std::string, std::string> expected_map{
+        {"subgroup", uri_sub_group}, {"subarray", uri_sub_array}};
+
+    soma_group->open(OpenMode::read, std::pair<uint64_t, uint64_t>(0, 2));
     REQUIRE(soma_group->ctx() == ctx);
     REQUIRE(soma_group->uri() == uri_main_group);
     REQUIRE(soma_group->get_length() == 2);
-    std::map<std::string, std::string> expected_map{
-        {"subgroup", uri_sub_group}, {"subarray", uri_sub_array}};
     REQUIRE(expected_map == soma_group->member_to_uri_mapping());
     REQUIRE(soma_group->get_member("subgroup").type() == Object::Type::Group);
     REQUIRE(soma_group->get_member("subarray").type() == Object::Type::Array);
     soma_group->close();
 
-    soma_group->open(TILEDB_WRITE, 3);
+    soma_group->open(OpenMode::write, std::pair<uint64_t, uint64_t>(0, 3));
+    REQUIRE(expected_map == soma_group->member_to_uri_mapping());
     soma_group->remove_member("subgroup");
     soma_group->close();
 
-    soma_group->open(TILEDB_READ, 4);
+    soma_group->open(OpenMode::read, std::pair<uint64_t, uint64_t>(0, 4));
     REQUIRE(soma_group->get_length() == 1);
     REQUIRE(soma_group->has_member("subgroup") == false);
     REQUIRE(soma_group->has_member("subarray") == true);
@@ -193,35 +199,39 @@ TEST_CASE("SOMAGroup: metadata") {
     auto ctx = std::make_shared<Context>();
 
     std::string uri = "mem://unit-test-group";
-    Group::create(*ctx, uri);
-    auto soma_group = SOMAGroup::open(TILEDB_WRITE, ctx, uri, "metadata", 1);
+    SOMAGroup::create(ctx, uri, "NONE");
+    auto soma_group = SOMAGroup::open(
+        OpenMode::write,
+        ctx,
+        uri,
+        "metadata",
+        std::pair<uint64_t, uint64_t>(1, 1));
     int32_t val = 100;
     soma_group->set_metadata("md", TILEDB_INT32, 1, &val);
     soma_group->close();
 
-    soma_group->open(TILEDB_READ, 1);
+    soma_group->open(OpenMode::read, std::pair<uint64_t, uint64_t>(1, 1));
+    REQUIRE(soma_group->metadata_num() == 2);
+    REQUIRE(soma_group->has_metadata("soma_object_type") == true);
     REQUIRE(soma_group->has_metadata("md") == true);
-    REQUIRE(soma_group->metadata_num() == 1);
 
-    auto mdval = soma_group->get_metadata(0);
-    REQUIRE(std::get<MetadataInfo::key>(mdval) == "md");
-    REQUIRE(std::get<MetadataInfo::dtype>(mdval) == TILEDB_INT32);
-    REQUIRE(std::get<MetadataInfo::num>(mdval) == 1);
-    REQUIRE(*((const int32_t*)std::get<MetadataInfo::value>(mdval)) == 100);
+    auto mdval = soma_group->get_metadata("md");
+    REQUIRE(std::get<MetadataInfo::dtype>(*mdval) == TILEDB_INT32);
+    REQUIRE(std::get<MetadataInfo::num>(*mdval) == 1);
+    REQUIRE(*((const int32_t*)std::get<MetadataInfo::value>(*mdval)) == 100);
+    soma_group->close();
 
+    soma_group->open(OpenMode::write, std::pair<uint64_t, uint64_t>(2, 2));
+    // Metadata should also be retrievable in write mode
     mdval = soma_group->get_metadata("md");
-    REQUIRE(std::get<MetadataInfo::key>(mdval) == "md");
-    REQUIRE(std::get<MetadataInfo::dtype>(mdval) == TILEDB_INT32);
-    REQUIRE(std::get<MetadataInfo::num>(mdval) == 1);
-    REQUIRE(*((const int32_t*)std::get<MetadataInfo::value>(mdval)) == 100);
-    soma_group->close();
-
-    soma_group->open(TILEDB_WRITE, 2);
+    REQUIRE(*((const int32_t*)std::get<MetadataInfo::value>(*mdval)) == 100);
     soma_group->delete_metadata("md");
+    mdval = soma_group->get_metadata("md");
+    REQUIRE(!mdval.has_value());
     soma_group->close();
 
-    soma_group->open(TILEDB_READ, 3);
+    soma_group->open(OpenMode::read, std::pair<uint64_t, uint64_t>(3, 3));
     REQUIRE(soma_group->has_metadata("md") == false);
-    REQUIRE(soma_group->metadata_num() == 0);
+    REQUIRE(soma_group->metadata_num() == 1);
     soma_group->close();
 }

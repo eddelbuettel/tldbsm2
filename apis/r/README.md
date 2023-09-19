@@ -1,33 +1,35 @@
 # Overview
 
-This is the R implementation of the [SOMA API specification](https://github.com/single-cell-data/SOMA).
-
-This `main` branch implements the [updated specification](https://github.com/single-cell-data/SOMA/blob/main/abstract_specification.md).
-Please also see the `main-old` branch for an implementation of the [original specification](https://github.com/single-cell-data/TileDB-SOMA/blob/main-old/spec/specification.md).
+This is the R implementation of the [SOMA API specification](https://github.com/single-cell-data/SOMA/blob/main/abstract_specification.md).
 
 # Installation
 
 ## Release packages
 
-TileDB-SOMA releases are available on R-universe and [Conda](https://anaconda.org/tiledb/r-tiledbsoma), and can be installed directly from R or `mamba` as indicated below.
+TileDB-SOMA releases can be installed from R-universe, which serves macOS binaries and the source
+package for other Unix-like platforms.
 
 ```r
 install.packages('tiledbsoma', repos = c('https://tiledb-inc.r-universe.dev',
                                          'https://cloud.r-project.org'))
 ```
 
+Installing from source on Unix-like platforms requires `cmake` and `git`.
+
+Alternatively, tiledbsoma can be installed directly from [Conda](https://anaconda.org/tiledb/r-tiledbsoma), which serves binaries for multiple architectures.
+
 ```bash
 mamba install -c conda-forge -c tiledb r-tiledbsoma
 ```
 
-The r-universe repo serves macOS binaries and the source package for other Unix-like platforms. The conda channel serves binaries for multiple architectures.
+*Note, we're using `mamba` here as a drop-in replacement for `conda` to accelerate the install process.*
 
 ## From source
 
-To install the very latest tiledbsoma development version (our `main` branch), use [`remotes::install_github()`](https://cran.r-project.org/web/packages/remotes/readme/README.html):
+To install the very latest tiledbsoma development version (our `main` branch), use [`remotes::install_github()`](https://cran.r-project.org/package=remotes/readme/README.html):
 
 ```r
-remotes::install_github("https://github.com/single-cell-data/TileDB-SOMA", subdir="apis/r")
+remotes::install_github("https://github.com/single-cell-data/TileDB-SOMA", subdir = "apis/r")
 ```
 
 ### Requirements
@@ -63,3 +65,5 @@ Please see [https://github.com/single-cell-data/TileDB-SOMA/issues](https://gith
 # Information for developers
 
 Please see the [TileDB-SOMA wiki](https://github.com/single-cell-data/TileDB-SOMA/wiki).
+
+This `main` branch implements the [updated specification](https://github.com/single-cell-data/SOMA/blob/main/abstract_specification.md). Please also see the `main-old` branch for an implementation of the [original specification](https://github.com/single-cell-data/TileDB-SOMA/blob/main-old/spec/specification.md).

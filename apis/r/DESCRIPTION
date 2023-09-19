@@ -1,30 +1,24 @@
 Package: tiledbsoma
 Type: Package
-Title: TileDB SOMA
+Title: 'TileDB' Stack of Matrices, Annotated ('SOMA')
 Description: Interface for working with 'TileDB'-based Stack of Matrices,
     Annotated ('SOMA'): an open data model for representing annotated matrices,
-    like those commonly used for single cell data analysis.
-Version: 1.4.0
+    like those commonly used for single cell data analysis. It is documented at
+    <https://github.com/single-cell-data>; a formal specification available is at
+    <https://github.com/single-cell-data/SOMA/blob/main/abstract_specification.md>.
+Version: 1.4.3.1
 Authors@R: c(
-    person(given = "Aaron",
-           family = "Wolen",
-           role = c("cre", "aut"),
-           email = "aaron@tiledb.com",
+    person(given = "Aaron", family = "Wolen",
+           role = c("cre", "aut"), email = "aaron@tiledb.com",
            comment = c(ORCID = "0000-0003-2542-2202")),
-    person(given = "Dirk",
-           family = "Eddelbuettel",
-           email = "dirk@tiledb.com",
-           role = "aut",
+    person(given = "Dirk", family = "Eddelbuettel",
+           role = "aut", email = "dirk@tiledb.com",
            comment = c(ORCID = "0000-0001-6419-907X")),
-    person(given = "Paul",
-           family = "Hoffman",
-           email = "paul.hoffman@tiledb.com",
-           role = "aut",
+    person(given = "Paul", family = "Hoffman",
+           role = "aut", email = "paul.hoffman@tiledb.com",
            comment = c(ORCID = "0000-0002-7693-8957")),
-    person(given = "John",
-           family = "Kerl",
-           email = "john.kerl@tiledb.com",
-           role = "aut"),
+    person(given = "John", family = "Kerl",
+           role = "aut", email = "john.kerl@tiledb.com"),
     person(given = "TileDB, Inc.",
            role = c("cph", "fnd"))
     )
@@ -40,7 +34,7 @@ Imports:
     Matrix,
     stats,
     bit64,
-    tiledb (>= 0.20.3),
+    tiledb (>= 0.21.0),
     arrow,
     utils,
     fs,
@@ -63,10 +57,11 @@ Suggests:
     withr,
     testthat (>= 3.0.0),
     pbmc3k.tiledb,
+    pbmc3k.sce,
     SeuratObject (>= 4.1.0),
     datasets,
     SingleCellExperiment (>= 1.20.0),
-    SummarizedExperiment,
+    SummarizedExperiment (>= 1.28.0),
     S4Vectors
 VignetteBuilder: knitr
 Config/testthat/edition: 2

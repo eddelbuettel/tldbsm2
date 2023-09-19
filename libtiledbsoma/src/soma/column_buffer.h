@@ -36,6 +36,7 @@
 #include <stdexcept>  // for windows: error C2039: 'runtime_error': is not a member of 'std'
 
 #include <tiledb/tiledb>
+#include <tiledb/tiledb_experimental>
 
 #include "../utils/common.h"
 #include "../utils/logger.h"
@@ -70,27 +71,19 @@ class ColumnBuffer {
         std::shared_ptr<Array> array, std::string_view name);
 
     /**
-     * @brief Create a ColumnBuffer from a schema and column name.
-     *
-     * @param schema TileDB schema
-     * @param name TileDB dimension or attribute name
-     * @return ColumnBuffer
-     */
-    static std::shared_ptr<ColumnBuffer> create(
-        ArraySchema schema, std::string_view name);
-
-    /**
      * @brief Create a ColumnBuffer from a schema, column name, and data.
      *
-     * @param schema TileDB schema
+     * @param array TileDB array
      * @param name TileDB dimension or attribute name
      * @param data Data to set in buffer
      * @return ColumnBuffer
      */
     template <typename T>
     static std::shared_ptr<ColumnBuffer> create(
-        ArraySchema schema, std::string_view name, std::vector<T> data) {
-        auto column_buff = ColumnBuffer::create(schema, name);
+        std::shared_ptr<Array> array,
+        std::string_view name,
+        std::vector<T> data) {
+        auto column_buff = ColumnBuffer::create(array, name);
         column_buff->num_cells_ = data.size();
         column_buff->data_.resize(data.size());
         column_buff->data_.assign(
@@ -118,6 +111,7 @@ class ColumnBuffer {
      * @param num_bytes Number of bytes to allocate for data
      * @param is_var Column type is variable length
      * @param is_nullable Column can contain null values
+     * @param enumeration Optional Enumeration associated with column
      */
     ColumnBuffer(
         std::string_view name,
@@ -125,7 +119,8 @@ class ColumnBuffer {
         size_t num_cells,
         size_t num_bytes,
         bool is_var = false,
-        bool is_nullable = false);
+        bool is_nullable = false,
+        std::optional<Enumeration> enumeration = std::nullopt);
 
     ColumnBuffer() = delete;
     ColumnBuffer(const ColumnBuffer&) = delete;
@@ -243,6 +238,10 @@ class ColumnBuffer {
         return is_nullable_;
     }
 
+    std::optional<Enumeration> get_enumeration() const {
+        return enumeration_;
+    }
+
     /**
      * @brief Convert the data bytemap to a bitmap in place.
      *
@@ -259,6 +258,76 @@ class ColumnBuffer {
         ColumnBuffer::to_bitmap(validity());
     }
 
+    /**
+     * @brief Add an optional enumeration vector,
+     *
+     */
+    void add_enumeration(const std::vector<std::string>& vec) {
+        enums_ = vec;
+        has_enumeration_ = true;
+    }
+
+    /**
+     * @brief Return true if the buffer contains enumeration.
+     */
+    bool has_enumeration() const {
+        return has_enumeration_;
+    }
+
+    /**
+     * @brief Return optional enumeration vector,
+     *
+     */
+    std::vector<std::string> get_enumeration() {
+        return enums_;
+    }
+
+    /**
+     * @brief Convert enumeration (aka dictionary)
+     *
+     */
+    void convert_enumeration() {
+        if (!has_enumeration_) {
+            throw TileDBSOMAError(
+                "[ColumnBuffer] No enumeration defined for " + name_);
+        }
+        const size_t n_vec = enums_.size();  // plus one for extra offset
+        enum_offsets_.resize(n_vec + 1);
+        enum_str_ = "";
+        uint32_t cumlen = 0;
+        for (size_t i = 0; i < n_vec; i++) {
+            std::string s(enums_[i]);
+            enum_str_ += s;
+            enum_offsets_[i] = cumlen;
+            cumlen += s.length();
+        }
+        enum_offsets_[n_vec] = cumlen;
+    }
+
+    /**
+     * @brief Return optional enumeration offsets vector
+     *
+     */
+    tcb::span<uint32_t> enum_offsets() {
+        if (!has_enumeration_) {
+            throw TileDBSOMAError(
+                "[ColumnBuffer] No enumeration defined for " + name_);
+        }
+        return tcb::span<uint32_t>(enum_offsets_.data(), enum_offsets_.size());
+    }
+
+    /**
+     * @brief Return optional enumeration string
+     *
+     */
+    tcb::span<char> enum_string() {
+        if (!has_enumeration_) {
+            throw TileDBSOMAError(
+                "[ColumnBuffer] No enumeration defined for " + name_);
+        }
+        return tcb::span<char>(enum_str_.data(), enum_str_.length());
+    }
+
    private:
     //===================================================================
     //= private static
@@ -272,6 +341,7 @@ class ColumnBuffer {
      * @param type TileDB datatype
      * @param is_var True if variable length data
      * @param is_nullable True if nullable data
+     * @param enumeration Optional Enumeration associated with column
      * @return ColumnBuffer
      */
     static std::shared_ptr<ColumnBuffer> alloc(
@@ -279,7 +349,8 @@ class ColumnBuffer {
         std::string_view name,
         tiledb_datatype_t type,
         bool is_var,
-        bool is_nullable);
+        bool is_nullable,
+        std::optional<Enumeration> enumeration);
 
     //===================================================================
     //= private non-static
@@ -303,6 +374,9 @@ class ColumnBuffer {
     // If true, the data is nullable
     bool is_nullable_;
 
+    // If applicable, the Enumeration associated with the column
+    std::optional<Enumeration> enumeration_;
+
     // Data buffer.
     std::vector<std::byte> data_;
 
@@ -311,6 +385,16 @@ class ColumnBuffer {
 
     // Validity buffer (optional).
     std::vector<uint8_t> validity_;
+
+    // True if the array has at least one enumerations
+    bool has_enumeration_ = false;
+
+    // Enumerations (optional)
+    std::vector<std::string> enums_;
+
+    // Enumerations (optional) as string and offsets
+    std::string enum_str_;
+    std::vector<uint32_t> enum_offsets_;
 };
 
 }  // namespace tiledbsoma

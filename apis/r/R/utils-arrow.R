@@ -81,7 +81,8 @@ tiledb_type_from_arrow_type <- function(x) {
     # fixed_size_list = "fixed_size_list",
     # map_of = "map",
     # duration = "duration",
-    stop("Unsupported data type: ", x$name, call. = FALSE)
+    dictionary = "INT32", 			# for a dictionary the 'values' are ints, levels are character
+    stop("Unsupported Arrow data type: ", x$name, call. = FALSE)
   )
 }
 
@@ -161,14 +162,62 @@ arrow_field_from_tiledb_dim <- function(x) {
   )
 }
 
+## With a nod to Kevin Ushey
+#' @noRd
+yoink <- function(package, symbol) {
+    do.call(":::", list(package, symbol))
+}
+
+
 #' Create an Arrow field from a TileDB attribute
 #' @noRd
-arrow_field_from_tiledb_attr <- function(x) {
-  stopifnot(inherits(x, "tiledb_attr"))
-  arrow::field(
-    name = tiledb::name(x),
-    type = arrow_type_from_tiledb_type(tiledb::datatype(x)),
-    nullable = tiledb::tiledb_attribute_get_nullable(x)
+arrow_field_from_tiledb_attr <- function(x, arrptr=NULL) {
+    stopifnot(inherits(x, "tiledb_attr"))
+    if (tiledb::tiledb_attribute_has_enumeration(x) && !is.null(arrptr)) {
+        .tiledb_array_is_open <- yoink("tiledb", "libtiledb_array_is_open")
+        if (!.tiledb_array_is_open(arrptr)) {
+            .tiledb_array_open_with_ptr <- yoink("tiledb", "libtiledb_array_open_with_ptr")
+            arrptr <- .tiledb_array_open_with_ptr(arrptr, "READ")
+        }
+        ord <- tiledb::tiledb_attribute_is_ordered_enumeration_ptr(x, arrptr)
+        idx <- arrow_type_from_tiledb_type(tiledb::datatype(x))
+        arrow::field(name = tiledb::name(x),
+                     type = arrow::dictionary(index_type=idx, ordered=ord),
+                     nullable = tiledb::tiledb_attribute_get_nullable(x))
+    } else {
+        arrow::field(name = tiledb::name(x),
+                     type = arrow_type_from_tiledb_type(tiledb::datatype(x)),
+                     nullable = tiledb::tiledb_attribute_get_nullable(x))
+    }
+}
+
+#' Create a TileDB attribute from an Arrow field
+#' @return a [`tiledb::tiledb_attr-class`]
+#' @noRd
+tiledb_attr_from_arrow_field <- function(field, tiledb_create_options) {
+  stopifnot(
+    is_arrow_field(field),
+    inherits(tiledb_create_options, "TileDBCreateOptions")
+  )
+
+  # Default zstd filter to use if none is specified in platform config
+  default_zstd_filter <- list(
+    name = "ZSTD",
+    COMPRESSION_LEVEL = tiledb_create_options$dataframe_dim_zstd_level()
+  )
+
+  field_type <- tiledb_type_from_arrow_type(field$type)
+  tiledb::tiledb_attr(
+    name = field$name,
+    type = field_type,
+    nullable = field$nullable,
+    ncells = if (field_type == "ASCII") NA_integer_ else 1L,
+    filter_list = tiledb::tiledb_filter_list(
+      tiledb_create_options$attr_filters(
+        attr_name = field$name,
+        default = list(default_zstd_filter)
+      )
+    )
   )
 }
 
@@ -176,11 +225,13 @@ arrow_field_from_tiledb_attr <- function(x) {
 #' @noRd
 arrow_schema_from_tiledb_schema <- function(x) {
   stopifnot(inherits(x, "tiledb_array_schema"))
-  fields <- c(
-    lapply(tiledb::dimensions(x), arrow_field_from_tiledb_dim),
-    lapply(tiledb::attrs(x), arrow_field_from_tiledb_attr)
-  )
-  arrow::schema(fields)
+  dimfields <- lapply(tiledb::dimensions(x), arrow_field_from_tiledb_dim)
+  if (!is.null(x@arrptr)) {
+      attfields <- lapply(tiledb::attrs(x), arrow_field_from_tiledb_attr, x@arrptr)
+  } else {
+      attfields <- lapply(tiledb::attrs(x), arrow_field_from_tiledb_attr)
+  }
+  arrow::schema(c(dimfields, attfields))
 }
 
 #' Validate external pointer to ArrowArray
@@ -188,4 +239,94 @@ arrow_schema_from_tiledb_schema <- function(x) {
 check_arrow_pointers <- function(arrlst) {
     stopifnot("First argument must be an external pointer to ArrowArray" = check_arrow_array_tag(arrlst[[1]]),
               "Second argument must be an external pointer to ArrowSchema" = check_arrow_schema_tag(arrlst[[2]]))
+}
+
+#' Validate compatibility of Arrow data types
+#'
+#' For most data types, this is a simple equality check but it also provides
+#' allowances for certain comparisons:
+#'
+#' - string and large_string
+#'
+#' @param from an [`arrow::DataType`]
+#' @param to an [`arrow::DataType`]
+#' @return a logical indicating whether the data types are compatible
+#' @noRd
+check_arrow_data_types <- function(from, to) {
+  stopifnot(
+    "'from' and 'to' must both be Arrow DataTypes"
+      = is_arrow_data_type(from) && is_arrow_data_type(to)
+  )
+
+  is_string <- function(x) {
+    x$ToString() %in% c("string", "large_string")
+  }
+
+  compatible <- if (is_string(from) && is_string(to)) {
+    TRUE
+  } else {
+    from$Equals(to)
+  }
+
+  compatible
+}
+
+#' Validate compatibility of Arrow schemas
+#'
+#' This is essentially a vectorized version of [`check_arrow_data_types`] that
+#' checks the compatibility of each field in the schemas.
+#' @param from an [`arrow::Schema`]
+#' @param to an [`arrow::Schema`] with the same set of fields as `from`
+#' @return `TRUE` if the schemas are compatible, otherwise an error is thrown
+#' @noRd
+check_arrow_schema_data_types <- function(from, to) {
+  stopifnot(
+    "'from' and 'to' must both be Arrow Schemas"
+      = is_arrow_schema(from) && is_arrow_schema(to),
+    "'from' and 'to' must have the same number of fields"
+      = length(from) == length(to),
+    "'from' and 'to' must have the same field names"
+      = identical(sort(names(from)), sort(names(to)))
+  )
+
+  fields <- names(from)
+  msgs <- character(0L)
+  for (field in fields) {
+    from_type <- from[[field]]$type
+    to_type <- to[[field]]$type
+    if (!check_arrow_data_types(from_type, to_type)) {
+      msg <- sprintf(
+        "  - field '%s': %s != %s\n",
+        field,
+        from_type$ToString(),
+        to_type$ToString()
+      )
+      msgs <- c(msgs, msg)
+    }
+  }
+
+  if (length(msgs) > 0L) {
+    stop(
+      "Schemas are incompatible:\n",
+      string_collapse(msgs, sep = "\n"),
+      call. = FALSE
+    )
+  }
+  return(TRUE)
+}
+
+#' Extract levels from dictionaries
+#' @noRd
+extract_levels <- function(arrtbl) {
+    stopifnot("Argument must be an Arrow Table object" = is_arrow_table(arrtbl))
+    nm <- names(arrtbl) 	# we go over the table column by column
+    reslst <- vector(mode = "list", length = length(nm))
+    names(reslst) <- nm		# and fill a named list, entries default to NULL
+    for (n in nm) {
+        if (inherits(arrow::infer_type(arrtbl[[n]]), "DictionaryType")) {
+            # levels() extracts the enumeration levels from the factor vector we have
+            reslst[[n]] <- levels(arrtbl[[n]]$as_vector())
+        }
+    }
+    reslst
 }

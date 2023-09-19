@@ -20,10 +20,11 @@ SOMADataFrame <- R6::R6Class(
     #' @param index_column_names A vector of column names to use as user-defined
     #' index columns.  All named columns must exist in the schema, and at least
     #' one index column name is required.
+    #' @param levels Optional list of enumeration (aka factor) levels
     #' @template param-platform-config
     #' @param internal_use_only Character value to signal this is a 'permitted' call,
     #' as `create()` is considered internal and should not be called directly.
-    create = function(schema, index_column_names = c("soma_joinid"), platform_config = NULL, internal_use_only = NULL) {
+    create = function(schema, index_column_names = c("soma_joinid"), levels = NULL, platform_config = NULL, internal_use_only = NULL) {
       if (is.null(internal_use_only) || internal_use_only != "allowed_use") {
         stop(paste("Use of the create() method is for internal use only. Consider using a",
                    "factory method as e.g. 'SOMADataFrameCreate()'."), call. = FALSE)
@@ -101,9 +102,8 @@ SOMADataFrame <- R6::R6Class(
           type = field_type,
           nullable = field$nullable,
           ncells = if (field_type == "ASCII") NA_integer_ else 1L,
-          filter_list = tiledb::tiledb_filter_list(
-            tiledb_create_options$attr_filters(field_name)
-          )
+          filter_list = tiledb::tiledb_filter_list(tiledb_create_options$attr_filters(field_name)),
+          enumeration = levels[[field_name]]
         )
       }
 
@@ -117,13 +117,10 @@ SOMADataFrame <- R6::R6Class(
         tile_order = cell_tile_orders["tile_order"],
         capacity = tiledb_create_options$capacity(),
         allows_dups = tiledb_create_options$allows_duplicates(),
-        offsets_filter_list = tiledb::tiledb_filter_list(
-          tiledb_create_options$offsets_filters()
-        ),
-        validity_filter_list = tiledb::tiledb_filter_list(
-          tiledb_create_options$validity_filters()
+        offsets_filter_list = tiledb::tiledb_filter_list(tiledb_create_options$offsets_filters()),
+        validity_filter_list = tiledb::tiledb_filter_list(tiledb_create_options$validity_filters()),
+        enumerations = if (any(!sapply(levels, is.null))) levels else NULL
         )
-      )
 
       # create array
       tiledb::tiledb_array_create(uri = self$uri, schema = tdb_schema)
@@ -216,16 +213,129 @@ SOMADataFrame <- R6::R6Class(
       }
 
       cfg <- as.character(tiledb::config(self$tiledbsoma_ctx$context()))
-      sr <- sr_setup(uri = self$uri,
+      rl <- sr_setup(uri = self$uri,
                      config = cfg,
                      colnames = column_names,
                      qc = value_filter,
                      dim_points = coords,
                      timestamp_end = private$tiledb_timestamp,
                      loglevel = log_level)
+      private$ctx_ptr <- rl$ctx
+      TableReadIter$new(rl$sr)
+    },
 
-      TableReadIter$new(sr)
+    #' @description Update (lifecycle: experimental)
+    #' @details
+    #' Update the existing `SOMADataFrame` to add or remove columns based on the
+    #' input:
+    #' - columns present in the current the `SOMADataFrame` but absent from the
+    #'   new `values` will be dropped
+    #' - columns absent in current `SOMADataFrame` but present in the new
+    #'   `values` will be added
+    #' - any columns present in both will be left alone, with the exception that
+    #'   if `values` has a different type for the column, the entire update
+    #'   will fail because attribute types cannot be changed.
+    #'
+    #' Furthermore, `values` must contain the same number of rows as the current
+    #' `SOMADataFrame`.
+    #'
+    #' @param values A `data.frame`, [`arrow::Table`], or
+    #' [`arrow::RecordBatch`].
+    #' @param row_index_name An optional scalar character. If provided, and if
+    #' the `values` argument is a `data.frame` with row names, then the row
+    #' names will be extracted and added as a new column to the `data.frame`
+    #' prior to performing the update. The name of this new column will be set
+    #' to the value specified by `row_index_name`.
+    update = function(values, row_index_name = NULL) {
+      private$check_open_for_write()
+      stopifnot(
+        "'values' must be a data.frame, Arrow Table or RecordBatch" =
+          is.data.frame(values) || is_arrow_table(values) || is_arrow_record_batch(values)
+      )
 
+      if (is.data.frame(values)) {
+        if (!is.null(row_index_name)) {
+          stopifnot(
+            "'row_index_name' must be NULL or a scalar character vector" =
+              is_scalar_character(row_index_name),
+            "'row_index_name' conflicts with an existing column name" =
+              !row_index_name %in% colnames(values)
+          )
+          values[[row_index_name]] <- rownames(values)
+        }
+        values <- arrow::as_arrow_table(values)
+      }
+
+      # Retrieve existing soma_joinids from array to:
+      # - validate number of rows in values matches number of rows in array
+      # - add original soma_joinids to values if not present
+      spdl::debug("[SOMADataFrame update]: Retrieving existing soma_joinids")
+      private$reopen(mode = "READ")
+      joinids <- self$read(column_names = "soma_joinid")$concat()$soma_joinid
+      if (length(joinids) != nrow(values)) {
+        stop(
+          "Number of rows in 'values' must match number of rows in array:\n",
+          "  - Number of rows in array: ", length(joinids), "\n",
+          "  - Number of rows in 'values': ", nrow(values),
+          call. = FALSE
+        )
+      }
+
+      # Add soma_joinid column if not present
+      if (!"soma_joinid" %in% colnames(values)) {
+        values$soma_joinid <- joinids
+      }
+      private$validate_schema(
+        schema = values$schema,
+        index_column_names = self$dimnames()
+      )
+
+      old_schema <- self$schema()
+      new_schema <- values$schema
+
+      old_cols <- old_schema$names
+      new_cols <- new_schema$names
+
+      drop_cols <- setdiff(old_cols, new_cols)
+      add_cols <- setdiff(new_cols, old_cols)
+      common_cols <- intersect(old_cols, new_cols)
+
+      tiledb_create_options <- TileDBCreateOptions$new(self$platform_config)
+
+      # Check compatibility of new/old data types in common columns
+      check_arrow_schema_data_types(
+        old_schema[common_cols],
+        new_schema[common_cols]
+      )
+
+      # Drop columns
+      se <- tiledb::tiledb_array_schema_evolution()
+      for (drop_col in drop_cols) {
+        spdl::info("[SOMADataFrame update]: dropping column '{}'", drop_col)
+        se <- tiledb::tiledb_array_schema_evolution_drop_attribute(
+          object = se,
+          attrname = drop_col
+        )
+      }
+
+      # Add columns
+      for (add_col in add_cols) {
+        spdl::info("[SOMADataFrame update]: adding column '{}'", add_col)
+        se <- tiledb::tiledb_array_schema_evolution_add_attribute(
+          object = se,
+          attr = tiledb_attr_from_arrow_field(
+            field = new_schema$GetFieldByName(add_col),
+            tiledb_create_options = tiledb_create_options
+          )
+        )
+      }
+
+      se <- tiledb::tiledb_array_schema_evolution_array_evolve(se, self$uri)
+
+      # Reopen array for writing with new schema
+      private$reopen(mode = "WRITE")
+      spdl::info("[SOMADataFrame update]: Writing new data")
+      self$write(values)
     }
 
   ),
@@ -243,7 +353,7 @@ SOMADataFrame <- R6::R6Class(
           is_arrow_schema(schema),
         is.character(index_column_names) && length(index_column_names) > 0,
         "All 'index_column_names' must be defined in the 'schema'" =
-          assert_subset(index_column_names, schema$names, type = "field"),
+          assert_subset(index_column_names, schema$names, "indexed field"),
         "Column names must not start with reserved prefix 'soma_'" =
           all(!startsWith(setdiff(schema$names, "soma_joinid"), "soma_"))
       )
@@ -262,7 +372,9 @@ SOMADataFrame <- R6::R6Class(
       }
 
       schema
-    }
+    },
 
+    # Internal variable to hold onto context returned by sr_setup
+    ctx_ptr = NULL
   )
 )

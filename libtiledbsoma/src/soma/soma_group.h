@@ -39,6 +39,7 @@
 #include <tiledb/tiledb_experimental>
 
 #include "../utils/common.h"
+#include "enums.h"
 
 namespace tiledbsoma {
 using namespace tiledb;
@@ -50,40 +51,52 @@ class SOMAGroup {
     //===================================================================
 
     /**
-     * @brief Open a group at the specified URI and return SOMAGroup
-     * object.
+     * @brief Create a SOMAGroup object at the given URI.
      *
-     * @param mode TILEDB_READ or TILEDB_WRITE
-     * @param uri URI of the group
-     * @param name Name of the group
-     * @param platform_config Config parameter dictionary
-     * @param timestamp Timestamp
-     * @return std::unique_ptr<SOMAGroup> SOMAGroup
+     * @param ctx TileDB context
+     * @param uri URI to create the SOMAGroup
+     * @param soma_type SOMACollection, SOMAMeasurement, or SOMAExperiment
      */
-    static std::unique_ptr<SOMAGroup> open(
-        tiledb_query_type_t mode,
+    static void create(
+        std::shared_ptr<Context> ctx,
         std::string_view uri,
-        std::string_view name = "unnamed",
-        std::map<std::string, std::string> platform_config = {},
-        std::optional<uint64_t> timestamp = std::nullopt);
+        std::string soma_type);
 
     /**
      * @brief Open a group at the specified URI and return SOMAGroup
      * object.
      *
-     * @param mode TILEDB_READ or TILEDB_WRITE
-     * @param ctx TileDB context
+     * @param mode read or write
      * @param uri URI of the group
      * @param name Name of the group
-     * @param timestamp Timestamp
+     * @param platform_config Config parameter dictionary
+     * @param timestamp Optional pair indicating timestamp start and end
      * @return std::unique_ptr<SOMAGroup> SOMAGroup
      */
     static std::unique_ptr<SOMAGroup> open(
-        tiledb_query_type_t mode,
+        OpenMode mode,
+        std::string_view uri,
+        std::string_view name = "unnamed",
+        std::map<std::string, std::string> platform_config = {},
+        std::optional<std::pair<uint64_t, uint64_t>> timestamp = std::nullopt);
+
+    /**
+     * @brief Open a group at the specified URI and return SOMAGroup
+     * object.
+     *
+     * @param mode read or write
+     * @param ctx TileDB context
+     * @param uri URI of the group
+     * @param name Name of the group
+     * @param timestamp Optional pair indicating timestamp start and end
+     * @return std::unique_ptr<SOMAGroup> SOMAGroup
+     */
+    static std::unique_ptr<SOMAGroup> open(
+        OpenMode mode,
         std::shared_ptr<Context> ctx,
         std::string_view uri,
         std::string_view name = "unnamed",
-        std::optional<uint64_t> timestamp = std::nullopt);
+        std::optional<std::pair<uint64_t, uint64_t>> timestamp = std::nullopt);
 
     //===================================================================
     //= public non-static
@@ -92,18 +105,18 @@ class SOMAGroup {
     /**
      * @brief Construct a new SOMAGroup object.
      *
-     * @param mode TILEDB_READ or TILEDB_WRITE
+     * @param mode read or write
      * @param uri URI of the group
      * @param name Name of the group
      * @param ctx TileDB context
-     * @param timestamp Timestamp
+     * @param timestamp Optional pair indicating timestamp start and end
      */
     SOMAGroup(
-        tiledb_query_type_t mode,
+        OpenMode mode,
         std::string_view uri,
         std::string_view name,
         std::shared_ptr<Context> ctx,
-        std::optional<uint64_t> timestamp = std::nullopt);
+        std::optional<std::pair<uint64_t, uint64_t>> timestamp = std::nullopt);
 
     SOMAGroup() = delete;
     SOMAGroup(const SOMAGroup&) = delete;
@@ -113,12 +126,12 @@ class SOMAGroup {
     /**
      * Open the SOMAGroup object.
      *
-     * @param mode TILEDB_READ or TILEDB_WRITE
-     * @param timestamp Timestamp
+     * @param mode read or write
+     * @param timestamp Optional pair indicating timestamp start and end
      */
     void open(
-        tiledb_query_type_t mode,
-        std::optional<uint64_t> timestamp = std::nullopt);
+        OpenMode mode,
+        std::optional<std::pair<uint64_t, uint64_t>> timestamp = std::nullopt);
 
     /**
      * Close the SOMAGroup object.
@@ -126,9 +139,18 @@ class SOMAGroup {
     void close();
 
     /**
+     * Check if the SOMAGroup is open.
+     *
+     * @return bool true if open
+     */
+    bool is_open() const {
+        return group_->is_open();
+    }
+
+    /**
      * Get the SOMAGroup URI.
      */
-    std::string uri() const;
+    const std::string uri() const;
 
     /**
      * Get the Context associated with the SOMAGroup.
@@ -162,11 +184,12 @@ class SOMAGroup {
      * Add a named member to a SOMAGroup.
      *
      * @param uri of member to add
-     * @param relative is the URI relative to the SOMAGroup location
+     * @param uri_type whether the given URI is automatic (default), absolute,
+     * or relative
      * @param name of member
      */
     void add_member(
-        const std::string& uri, bool relative, const std::string& name);
+        const std::string& uri, URIType uri_type, const std::string& name);
 
     /**
      * Get the number of members in the SOMAGroup.
@@ -246,18 +269,8 @@ class SOMAGroup {
      * @return MetadataValue (std::tuple<std::string, tiledb_datatype_t,
      * uint32_t, const void*>)
      */
-    MetadataValue get_metadata(const std::string& key) const;
-
-    /**
-     * @brief Given an index, get the associated value datatype, number of
-     * values, and value in binary form. The group must be opened in READ mode,
-     * otherwise the function will error out.
-     *
-     * @param index The index used to get the metadata.
-     * @return MetadataValue (std::tuple<std::string, tiledb_datatype_t,
-     * uint32_t, const void*>)
-     */
-    MetadataValue get_metadata(uint64_t index) const;
+    std::map<std::string, MetadataValue> get_metadata();
+    std::optional<MetadataValue> get_metadata(const std::string& key);
 
     /**
      * Check if the key exists in metadata from an open group. The group must
@@ -280,6 +293,11 @@ class SOMAGroup {
     //= private non-static
     //===================================================================
 
+    /**
+     * Fills the metadata and member-to-uri caches upon opening the array.
+     */
+    void fill_caches();
+
     // TileDB context
     std::shared_ptr<Context> ctx_;
 
@@ -290,7 +308,13 @@ class SOMAGroup {
     std::string name_;
 
     // TileDBGroup associated with the SOMAGroup
-    std::unique_ptr<Group> group_;
+    std::shared_ptr<Group> group_;
+
+    // Metadata cache
+    std::map<std::string, MetadataValue> metadata_;
+
+    // Member-to-URI cache
+    std::map<std::string, std::string> member_to_uri_;
 };
 
 }  // namespace tiledbsoma

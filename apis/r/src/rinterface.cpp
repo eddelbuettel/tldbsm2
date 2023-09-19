@@ -65,6 +65,8 @@ Rcpp::List soma_array_reader(const std::string& uri,
     spdl::info("[soma_array_reader] Reading from {}", uri);
 
     std::map<std::string, std::string> platform_config = config_vector_to_map(config);
+    // to create a Context object:
+    //    std::make_shared<Context>(Config(platform_config)),
 
     std::vector<std::string> column_names = {};
     if (!colnames.isNull()) {    // If we have column names, select them
@@ -72,14 +74,16 @@ Rcpp::List soma_array_reader(const std::string& uri,
         spdl::debug("[soma_array_reader] Selecting {} columns", column_names.size());
     }
 
+    auto tdb_result_order = get_tdb_result_order(result_order);
+
     // Read selected columns from the uri (return is unique_ptr<SOMAArray>)
-    auto sr = tdbs::SOMAArray::open(TILEDB_READ,
-                                    uri,
+    auto sr = tdbs::SOMAArray::open(OpenMode::read,
+				    uri,
                                     "unnamed",         // name parameter could be added
-                                    platform_config,   // to add, done in iterated reader
+                                    platform_config,
                                     column_names,
                                     batch_size,
-                                    result_order);
+                                    tdb_result_order);
 
     std::unordered_map<std::string, std::shared_ptr<tiledb::Dimension>> name2dim;
     std::shared_ptr<tiledb::ArraySchema> schema = sr->schema();
@@ -144,15 +148,25 @@ Rcpp::List soma_array_reader(const std::string& uri,
         auto buf = sr_data->get()->at(names[i]);
 
         // this is pair of array and schema pointer
-        auto pp = tdbs::ArrowAdapter::to_arrow(buf);
+        auto pp = tdbs::ArrowAdapter::to_arrow(buf, true);
 
         memcpy((void*) chldschemaxp, pp.second.get(), sizeof(ArrowSchema));
         memcpy((void*) chldarrayxp, pp.first.get(), sizeof(ArrowArray));
 
-        spdl::info("[soma_array_reader] Incoming name {} length {}", std::string(pp.second->name), pp.first->length);
+        spdl::info("[soma_array_reader] Incoming name {} length {}",
+                   std::string(pp.second->name), pp.first->length);
 
         schemaxp->children[i] = chldschemaxp;
         arrayxp->children[i] = chldarrayxp;
+
+        // if (buf->has_enumeration()) {
+        //     auto vec = buf->get_enumeration();
+        //     Rcpp::Rcout << names[i] << ": ";
+        //     for (auto& s: vec) {
+        //         Rcpp::Rcout << s << " ";
+        //     }
+        //     Rcpp::Rcout << std::endl;
+        // }
 
         if (pp.first->length > arrayxp->length) {
             spdl::debug("[soma_array_reader] Setting array length to {}", pp.first->length);
@@ -165,7 +179,12 @@ Rcpp::List soma_array_reader(const std::string& uri,
     return as;
 }
 
-//' @noRd
+//' Set the logging level for the R package and underlying C++ library
+//'
+//' @param level A character value with logging level understood by \sQuote{spdlog}
+//' such as \dQuote{trace}, \dQuote{debug}, \dQuote{info}, or \dQuote{warn}.
+//' @return Nothing is returned as the function is invoked for the side-effect.
+//' @export
 // [[Rcpp::export]]
 void set_log_level(const std::string& level) {
     spdl::set_level(level);
@@ -177,7 +196,7 @@ void set_log_level(const std::string& level) {
 Rcpp::CharacterVector get_column_types(const std::string& uri,
                                        const std::vector<std::string>& colnames) {
 
-    auto sr = tdbs::SOMAArray::open(TILEDB_READ, uri);
+    auto sr = tdbs::SOMAArray::open(OpenMode::read, uri);
     sr->submit();
     auto sr_data = sr->read_next();
     size_t n = colnames.size();
@@ -192,7 +211,7 @@ Rcpp::CharacterVector get_column_types(const std::string& uri,
 
 // [[Rcpp::export]]
 double nnz(const std::string& uri, Rcpp::Nullable<Rcpp::CharacterVector> config = R_NilValue) {
-    auto sr = tdbs::SOMAArray::open(TILEDB_READ, uri, "unnamed", config_vector_to_map(config));
+    auto sr = tdbs::SOMAArray::open(OpenMode::read, uri, "unnamed", config_vector_to_map(config));
     return static_cast<double>(sr->nnz());
 }
 
@@ -213,6 +232,6 @@ bool check_arrow_array_tag(Rcpp::XPtr<ArrowArray> xp) {
 // [[Rcpp::export]]
 Rcpp::NumericVector shape(const std::string& uri,
                           Rcpp::Nullable<Rcpp::CharacterVector> config = R_NilValue) {
-    auto sr = tdbs::SOMAArray::open(TILEDB_READ, uri, "unnamed", config_vector_to_map(Rcpp::wrap(config)));
+    auto sr = tdbs::SOMAArray::open(OpenMode::read, uri, "unnamed", config_vector_to_map(Rcpp::wrap(config)));
     return makeInteger64(sr->shape());
 }
