@@ -43,7 +43,8 @@ jobs:
             os: ubuntu-latest
             covr: 'yes'
             arch_os: linux-x86_64
-
+      fail-fast: false
+            
     runs-on: ${{ matrix.os }}
 
     steps:
