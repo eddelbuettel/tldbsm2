@@ -1,5 +1,5 @@
 test_that("Write SingleCellExperiment mechanics", {
-  remainer_breaks_in_ci <- "sadly"; skip_if(nzchar(remainer_breaks_in_ci))
+  #remainer_breaks_in_ci <- "sadly"; skip_if(nzchar(remainer_breaks_in_ci))
   skip_if(!extended_tests() || covr_tests())
   skip_if_not_installed('pbmc3k.sce')
   suppressMessages(skip_if_not_installed('SingleCellExperiment', .MINIMUM_SCE_VERSION('c')))
@@ -66,7 +66,7 @@ test_that("Write SingleCellExperiment mechanics", {
 })
 
 test_that("SingleCellExperiment mainExpName mechanics", {
-  remainer_breaks_in_ci <- "sadly"; skip_if(nzchar(remainer_breaks_in_ci))
+  #remainer_breaks_in_ci <- "sadly"; skip_if(nzchar(remainer_breaks_in_ci))
   skip_if(!extended_tests() || covr_tests())
   skip_if_not_installed('SingleCellExperiment', .MINIMUM_SCE_VERSION('c'))
   skip_if_not_installed('pbmc3k.sce')

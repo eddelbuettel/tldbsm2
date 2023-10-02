@@ -1,5 +1,5 @@
 test_that("Write SummarizedExperiment mechanics", {
-  remainer_breaks_in_ci <- "sadly"; skip_if(nzchar(remainer_breaks_in_ci))
+  #remainer_breaks_in_ci <- "sadly"; skip_if(nzchar(remainer_breaks_in_ci))
   suppressMessages(skip_if_not_installed('SummarizedExperiment', '1.28.0'))
   skip_if_not_installed('pbmc3k.sce')
 

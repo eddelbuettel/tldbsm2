@@ -120,7 +120,7 @@ jobs:
         run: ls -l apis/r/*.tar.gz
 
       - name: Update just in case
-        if: ${{ matrix.os != 'macOS-latest' && matrix.covr == 'yes' }}
+        if: ${{ matrix.os != 'macOS-latest' }}
         run: sudo apt update -qq && sudo apt upgrade -y
 
       - name: Configure
