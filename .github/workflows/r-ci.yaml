@@ -119,6 +119,10 @@ jobs:
       - name: Show files
         run: ls -l apis/r/*.tar.gz
 
+      - name: Update just in case
+        if: ${{ matrix.os != 'macOS-latest' && matrix.covr == 'yes' }}
+        run: sudo apt update -qq && sudo apt upgrade -y
+
       - name: Configure
         run: cd apis/r && ./configure
         
