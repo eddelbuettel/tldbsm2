@@ -122,17 +122,17 @@ jobs:
       - name: Configure
         run: cd apis/r && ./configure
         
-      # - name: Test 
-      #   if: ${{ matrix.covr == 'no' }}
-      #   run: cd apis/r && tools/r-ci.sh run_tests
-        
-      - name: Test Linux
-        if: ${{ matrix.covr == 'no' && matrix.os == 'ubuntu-latest'}}
+      - name: Test 
+        if: ${{ matrix.covr == 'no' }}
         run: cd apis/r && tools/r-ci.sh run_tests
+        
+      #- name: Test Linux
+      #  if: ${{ matrix.covr == 'no' && matrix.os == 'ubuntu-latest'}}
+      #  run: cd apis/r && tools/r-ci.sh run_tests
 
-      - name: Test Mac
-        if: ${{ matrix.covr == 'no' && matrix.os == 'macOS-latest'}}
-        run: cd apis/r && CI="" tools/r-ci.sh run_tests
+      #- name: Test Mac
+      #  if: ${{ matrix.covr == 'no' && matrix.os == 'macOS-latest'}}
+      #  run: cd apis/r && CI="" tools/r-ci.sh run_tests
         
       #- name: View Install Output
       #  run: cat $HOME/work/TileDB-SOMA/TileDB-SOMA/apis/r/tiledbsoma.Rcheck/00install.out
