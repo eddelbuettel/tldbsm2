@@ -97,6 +97,11 @@ SOMADataFrame <- R6::R6Class(
         field <- schema$GetFieldByName(field_name)
         field_type <- tiledb_type_from_arrow_type(field$type)
 
+        # Check if the field is ordered and mark it as such
+        if (!is.null(x = levels[[field_name]]) && isTRUE(field$type$ordered)) {
+          attr(levels[[field_name]], 'ordered') <- attr(levels[[field_name]], 'ordered', exact = TRUE) %||% TRUE
+        }
+
         tdb_attrs[[field_name]] <- tiledb::tiledb_attr(
           name = field_name,
           type = field_type,
@@ -321,13 +326,28 @@ SOMADataFrame <- R6::R6Class(
       # Add columns
       for (add_col in add_cols) {
         spdl::info("[SOMADataFrame update]: adding column '{}'", add_col)
-        se <- tiledb::tiledb_array_schema_evolution_add_attribute(
-          object = se,
-          attr = tiledb_attr_from_arrow_field(
-            field = new_schema$GetFieldByName(add_col),
-            tiledb_create_options = tiledb_create_options
-          )
+
+        col_type <- new_schema$GetFieldByName(add_col)$type
+        attr <- tiledb_attr_from_arrow_field(
+          field = new_schema$GetFieldByName(add_col),
+          tiledb_create_options = tiledb_create_options
         )
+
+        if (inherits(col_type, "DictionaryType")) {
+          spdl::debug(
+            "[SOMADataFrame update]: adding column '{}' as an enumerated type",
+            add_col
+          )
+          se <- tiledb::tiledb_array_schema_evolution_add_enumeration(
+            object = se,
+            name = add_col,
+            enums = levels(values$GetColumnByName(add_col)$as_vector()),
+            ordered = col_type$ordered
+          )
+          attr <- tiledb::tiledb_attribute_set_enumeration_name(attr, add_col)
+        }
+
+        se <- tiledb::tiledb_array_schema_evolution_add_attribute(se, attr)
       }
 
       se <- tiledb::tiledb_array_schema_evolution_array_evolve(se, self$uri)

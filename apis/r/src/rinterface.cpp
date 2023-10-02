@@ -1,5 +1,6 @@
 #include <Rcpp.h>               // for R interface to C++
 #include <nanoarrow.h>          // for C interface to Arrow
+#include <RcppInt64>            // for fromInteger64
 
 // we currently get deprecation warnings by default which are noisy
 #ifndef TILEDB_NO_API_DEPRECATION_WARNINGS
@@ -117,8 +118,6 @@ Rcpp::List soma_array_reader(const std::string& uri,
         apply_dim_ranges(sr.get(), name2dim, lst);
     }
 
-    sr->submit();
-
     // Getting next batch:  std::optional<std::shared_ptr<ArrayBuffers>>
     auto sr_data = sr->read_next();
     if (!sr->results_complete()) {
@@ -197,7 +196,6 @@ Rcpp::CharacterVector get_column_types(const std::string& uri,
                                        const std::vector<std::string>& colnames) {
 
     auto sr = tdbs::SOMAArray::open(OpenMode::read, uri);
-    sr->submit();
     auto sr_data = sr->read_next();
     size_t n = colnames.size();
     Rcpp::CharacterVector vs(n);
@@ -233,5 +231,5 @@ bool check_arrow_array_tag(Rcpp::XPtr<ArrowArray> xp) {
 Rcpp::NumericVector shape(const std::string& uri,
                           Rcpp::Nullable<Rcpp::CharacterVector> config = R_NilValue) {
     auto sr = tdbs::SOMAArray::open(OpenMode::read, uri, "unnamed", config_vector_to_map(Rcpp::wrap(config)));
-    return makeInteger64(sr->shape());
+    return Rcpp::toInteger64(sr->shape());
 }

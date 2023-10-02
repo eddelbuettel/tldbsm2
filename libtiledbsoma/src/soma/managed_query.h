@@ -98,9 +98,10 @@ class ManagedQuery {
     void select_ranges(
         const std::string& dim, const std::vector<std::pair<T, T>>& ranges) {
         subarray_range_set_ = true;
+        subarray_range_empty_[dim] = true;
         for (auto& [start, stop] : ranges) {
             subarray_->add_range(dim, start, stop);
-            subarray_range_empty_ = false;
+            subarray_range_empty_[dim] = false;
         }
     }
 
@@ -114,9 +115,10 @@ class ManagedQuery {
     template <typename T>
     void select_points(const std::string& dim, const std::vector<T>& points) {
         subarray_range_set_ = true;
+        subarray_range_empty_[dim] = true;
         for (auto& point : points) {
             subarray_->add_range(dim, point, point);
-            subarray_range_empty_ = false;
+            subarray_range_empty_[dim] = false;
         }
     }
 
@@ -130,9 +132,10 @@ class ManagedQuery {
     template <typename T>
     void select_points(const std::string& dim, const tcb::span<T> points) {
         subarray_range_set_ = true;
+        subarray_range_empty_[dim] = true;
         for (auto& point : points) {
             subarray_->add_range(dim, point, point);
-            subarray_range_empty_ = false;
+            subarray_range_empty_[dim] = false;
         }
     }
 
@@ -147,7 +150,7 @@ class ManagedQuery {
     void select_point(const std::string& dim, const T& point) {
         subarray_->add_range(dim, point, point);
         subarray_range_set_ = true;
-        subarray_range_empty_ = false;
+        subarray_range_empty_[dim] = false;
     }
 
     /**
@@ -269,16 +272,10 @@ class ManagedQuery {
     }
 
     /**
-     * @brief Submit the read query.
+     * @brief Configure query and allocate result buffers for reads.
      *
      */
-    void submit_read();
-
-    /**
-     * @brief Submit the write query.
-     *
-     */
-    void submit_write();
+    void setup_read();
 
     /**
      * @brief Check if the query is complete.
@@ -367,11 +364,17 @@ class ManagedQuery {
     }
 
     /**
-     * @brief Return results from the query.
+     * @brief Submit and return results from the query.
      *
      * @return std::shared_ptr<ArrayBuffers>
      */
-    std::shared_ptr<ArrayBuffers> results();
+    std::shared_ptr<ArrayBuffers> submit_read();
+
+    /**
+     * @brief Submit the write query.
+     *
+     */
+    void submit_write();
 
     /**
      * @brief Get the schema of the array.
@@ -388,7 +391,14 @@ class ManagedQuery {
      * @return true if the query contains only empty ranges.
      */
     bool is_empty_query() {
-        return subarray_range_set_ && subarray_range_empty_;
+        bool has_empty = false;
+        for (auto subdim : subarray_range_empty_) {
+            if (subdim.second == true) {
+                has_empty = true;
+                break;
+            }
+        }
+        return subarray_range_set_ && has_empty;
     }
 
     /**
@@ -440,8 +450,8 @@ class ManagedQuery {
     // True if a range has been added to the subarray
     bool subarray_range_set_ = false;
 
-    // True unless a non-empty range has been added to the subarray
-    bool subarray_range_empty_ = true;
+    // Map whether the dimension is empty (true) or not
+    std::map<std::string, bool> subarray_range_empty_ = {};
 
     // Set of column names to read (dim and attr). If empty, query all columns.
     std::vector<std::string> columns_;
@@ -455,7 +465,7 @@ class ManagedQuery {
     // A collection of ColumnBuffers attached to the query
     std::shared_ptr<ArrayBuffers> buffers_;
 
-    // True if the query has been submitted and the results have not been read
+    // True if the query has been submitted
     bool query_submitted_ = false;
 };
 
