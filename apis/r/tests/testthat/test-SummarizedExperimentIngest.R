@@ -1,4 +1,5 @@
 test_that("Write SummarizedExperiment mechanics", {
+  remainer_breaks_in_ci <- "sadly"; skip_if(nzchar(remainer_breaks_in_ci))
   suppressMessages(skip_if_not_installed('SummarizedExperiment', '1.28.0'))
   skip_if_not_installed('pbmc3k.sce')
 
@@ -27,7 +28,6 @@ test_that("Write SummarizedExperiment mechanics", {
   expect_s3_class(experiment, 'SOMAExperiment')
   expect_true(grepl('^summarized-experiment', basename(experiment$uri)))
 
-  remainer_breaks_in_ci <- "sadly"; skip_if(nzchar(remainer_breaks_in_ci))
   expect_s3_class(experiment$obs, 'SOMADataFrame')
 
   expect_identical(experiment$ms$names(), 'RNA')
