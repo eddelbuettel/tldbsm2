@@ -119,9 +119,8 @@ jobs:
       - name: Show files
         run: ls -l apis/r/*.tar.gz
 
-      - name: Update just in case
-        if: ${{ matrix.os != 'macOS-latest' }}
-        run: sudo apt update -qq && sudo apt upgrade -y
+      - name: Update packages
+        run: Rscript -e 'update.packages(ask=FALSE)'
 
       - name: Configure
         run: cd apis/r && ./configure
