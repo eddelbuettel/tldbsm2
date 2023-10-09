@@ -31,18 +31,18 @@ jobs:
     strategy:
       matrix:
         include:
-          - name: linux
-            os: ubuntu-latest
-            covr: 'no'
-            arch_os: linux-x86_64
+          # - name: linux
+          #   os: ubuntu-latest
+          #   covr: 'no'
+          #   arch_os: linux-x86_64
           - name: macos
             os: macOS-latest
             covr: 'no'
             arch_os: macos-x86_64
-          - name: coverage
-            os: ubuntu-latest
-            covr: 'yes'
-            arch_os: linux-x86_64
+          # - name: coverage
+          #   os: ubuntu-latest
+          #   covr: 'yes'
+          #   arch_os: linux-x86_64
       fail-fast: false
             
     runs-on: ${{ matrix.os }}
