@@ -38,18 +38,18 @@ jobs:
             MACOSX_DEPLOYMENT_TARGET: 10.14
             ARTIFACT_OS: 'macos'
             ARTIFACT_ARCH: 'x86_64'
-          - environ: 'macos_arm'
-            imageName: "macOS-11"
-            CMAKE_OSX_ARCHITECTURES: "arm64"
-            MACOSX_DEPLOYMENT_TARGET: 11 
-            ARTIFACT_OS: 'macos'
-            ARTIFACT_ARCH: 'arm64'
-          - environ: "linux"
-            imageName: "ubuntu-20.04"
-            CMAKE_OSX_ARCHITECTURES: ""
-            MACOSX_DEPLOYMENT_TARGET: ""
-            ARTIFACT_OS: 'linux'
-            ARTIFACT_ARCH: "x86_64"
+          # - environ: 'macos_arm'
+          #   imageName: "macOS-11"
+          #   CMAKE_OSX_ARCHITECTURES: "arm64"
+          #   MACOSX_DEPLOYMENT_TARGET: 11 
+          #   ARTIFACT_OS: 'macos'
+          #   ARTIFACT_ARCH: 'arm64'
+          # - environ: "linux"
+          #   imageName: "ubuntu-20.04"
+          #   CMAKE_OSX_ARCHITECTURES: ""
+          #   MACOSX_DEPLOYMENT_TARGET: ""
+          #   ARTIFACT_OS: 'linux'
+          #   ARTIFACT_ARCH: "x86_64"
 
     runs-on: ${{ matrix.imageName }}
 
