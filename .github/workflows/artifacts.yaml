@@ -23,7 +23,8 @@ env:
   ## three variables for scratch space while this runs, defined off the current 'workspace'
   TILEDBSOMA_BUILD: "${{ github.workspace }}/tiledb_build"
   TILEDBSOMA_SOURCE: "${{ github.workspace }}/libtiledbsoma"
-  TILEDBSOMA_INSTALL: "${{ github.workspace }}/.tiledbsoma_dist/${{ github.sha }}"
+  #TILEDBSOMA_INSTALL: "${{ github.workspace }}/.tiledbsoma_dist/${{ github.sha }}"
+  TILEDBSOMA_INSTALL: "/usr/local"
 
 jobs:
   build:
@@ -96,10 +97,12 @@ jobs:
                     -DCMAKE_OSX_ARCHITECTURES=${{ matrix.CMAKE_OSX_ARCHITECTURES }}
               #
               cmake --build ${{ env.TILEDBSOMA_BUILD }} --config Release -j4
-              cmake --build ${{ env.TILEDBSOMA_BUILD }} --target install-libtiledbsoma --config Release
+              sudo cmake --build ${{ env.TILEDBSOMA_BUILD }} --target install-libtiledbsoma --config Release
               #
               # this should not be needed -- the tiledb core library gets 'co-installed'
-              rm -vf ${{ env.TILEDBSOMA_INSTALL }}/lib/libtiledb.{so,dylib}*
+              #rm -vf ${{ env.TILEDBSOMA_INSTALL }}/lib/libtiledb.{so,dylib}*
+              #
+              sudo ldconfig
 
           - name: "Inspect installation output"
             run: ls -lR ${{ env.TILEDBSOMA_INSTALL }}
