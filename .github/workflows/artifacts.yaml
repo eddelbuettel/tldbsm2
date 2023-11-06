@@ -90,7 +90,7 @@ jobs:
                     -S ${{ env.TILEDBSOMA_SOURCE }} \
                	    -DDOWNLOAD_TILEDB_PREBUILT=ON \
               	    -DTILEDBSOMA_BUILD_CLI=OFF \
-              	    -DTILEDBSOMA_ENABLE_TESTING=ON \
+              	    -DTILEDBSOMA_ENABLE_TESTING=OFF \
                     -DOVERRIDE_INSTALL_PREFIX=OFF \
                     -DCMAKE_INSTALL_PREFIX=${{ env.TILEDBSOMA_INSTALL }} \
                     -DCMAKE_OSX_ARCHITECTURES=${{ matrix.CMAKE_OSX_ARCHITECTURES }}
