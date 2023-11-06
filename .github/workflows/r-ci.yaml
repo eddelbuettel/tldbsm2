@@ -122,13 +122,25 @@ jobs:
       - name: Update packages
         run: Rscript -e 'update.packages(ask=FALSE)'
 
+      - name: Get TileDB-R from r-universe just in case
+        run: Rscript -e 'bspm::disable(); options(repos = c(linux = "https://eddelbuettel.r-universe.dev/bin/linux/jammy/4.3/", cran = "https://cloud.r-project.org")); install.packages("tiledb")'
+        
       - name: Configure
         run: cd apis/r && ./configure
         
-      - name: Test 
-        if: ${{ matrix.covr == 'no' }}
-        run: cd apis/r && tools/r-ci.sh run_tests
+      #- name: Test 
+      #  if: ${{ matrix.covr == 'no' }}
+      #  run: cd apis/r && tools/r-ci.sh run_tests
+
+      - name: Build tar.gz
+        run: cd apis/r && R CMD build .
+
+      - name: Install tar.gz
+        run: cd apis/r && R CMD INSTALL $(ls -ltr tiledbsoma*.tar.gz)
         
+      - name: Test locally
+        run: cd apis/r && Rscript -e 'testthat::test_local()'
+      
       #- name: Test Linux
       #  if: ${{ matrix.covr == 'no' && matrix.os == 'ubuntu-latest'}}
       #  run: cd apis/r && tools/r-ci.sh run_tests
