@@ -21,6 +21,8 @@ env:
   ## the commit sha that triggered the workflow (cf https://docs.github.com/en/actions/learn-github-actions/contexts)
   ## note that this is shortened below from the full-length sha1 sum to the common first seven letters, used via steps.shasubstr.outputs.substring
   TILEDBSOMA_SHA: "${{ github.sha }}"
+  _R_CHECK_TESTS_NLINES_: 0
+  CI: True
 
 jobs:
   lib:
@@ -136,10 +138,10 @@ jobs:
         run: cd apis/r && R CMD build --no-manual --no-build-vignettes .
 
       - name: Install tar.gz
-        run: cd apis/r && R CMD INSTALL $(ls -ltr tiledbsoma*.tar.gz)
+        run: cd apis/r && R CMD INSTALL $(ls -1tr tiledbsoma*.tar.gz)
         
       - name: Test locally
-        run: cd apis/r && R CMD check --no-vignettes --no-manual $(ls -ltr tiledbsoma*.tar.gz)
+        run: cd apis/r && R CMD check --no-vignettes --no-manual $(ls -1tr tiledbsoma*.tar.gz)
 
       - name: Dump logs
         run: cd apis/r && tools/r-ci.sh dump_logs
