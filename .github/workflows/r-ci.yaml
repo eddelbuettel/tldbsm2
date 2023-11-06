@@ -133,7 +133,7 @@ jobs:
       #  run: cd apis/r && tools/r-ci.sh run_tests
 
       - name: Build tar.gz
-        run: cd apis/r && R CMD build .
+        run: cd apis/r && R CMD build --no-manual --no-vignettes .
 
       - name: Install tar.gz
         run: cd apis/r && R CMD INSTALL $(ls -ltr tiledbsoma*.tar.gz)
