@@ -33,7 +33,7 @@
 #include "managed_query.h"
 #include <tiledb/array_experimental.h>
 #include <tiledb/attribute_experimental.h>
-#include "logger_public.h"
+#include "../utils/logger.h"
 #include "utils/common.h"
 namespace tiledbsoma {
 
@@ -176,6 +176,8 @@ std::shared_ptr<ArrayBuffers> ManagedQuery::submit_read() {
     // complete.
     if (status == Query::Status::INCOMPLETE) {
         results_complete_ = false;
+    } else if (status == Query::Status::COMPLETE) {
+        results_complete_ = true;
     }
 
     // Update ColumnBuffer size to match query results
@@ -216,6 +218,15 @@ std::shared_ptr<ArrayBuffers> ManagedQuery::submit_read() {
         }
     }
     return buffers_;
+}
+
+void ManagedQuery::check_column_name(const std::string& name) {
+    if (!buffers_->contains(name)) {
+        throw TileDBSOMAError(fmt::format(
+            "[ManagedQuery] Column '{}' is not available in the query "
+            "results.",
+            name));
+    }
 }
 
 };  // namespace tiledbsoma

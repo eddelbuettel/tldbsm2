@@ -1,5 +1,5 @@
 test_that("Write SingleCellExperiment mechanics", {
-  skip_if(!extended_tests() || covr_tests() || is_macos())
+  skip_if(!extended_tests() || covr_tests())
   skip_if_not_installed('pbmc3k.sce')
   suppressMessages(skip_if_not_installed('SingleCellExperiment', .MINIMUM_SCE_VERSION('c')))
 
@@ -65,7 +65,7 @@ test_that("Write SingleCellExperiment mechanics", {
 })
 
 test_that("SingleCellExperiment mainExpName mechanics", {
-  skip_if(!extended_tests() || covr_tests() || is_macos())
+  skip_if(!extended_tests() || covr_tests())
   skip_if_not_installed('SingleCellExperiment', .MINIMUM_SCE_VERSION('c'))
   skip_if_not_installed('pbmc3k.sce')
 

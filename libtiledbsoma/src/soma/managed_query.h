@@ -88,6 +88,15 @@ class ManagedQuery {
         const std::vector<std::string>& names, bool if_not_empty = false);
 
     /**
+     * @brief Returns the column names set by the query.
+     *
+     * @return std::vector<std::string>
+     */
+    std::vector<std::string> column_names() {
+        return columns_;
+    }
+
+    /**
      * @brief Select dimension ranges to query.
      *
      * @tparam T Dimension type
@@ -420,14 +429,7 @@ class ManagedQuery {
      *
      * @param name Column name
      */
-    void check_column_name(const std::string& name) {
-        if (!buffers_->contains(name)) {
-            throw TileDBSOMAError(fmt::format(
-                "[ManagedQuery] Column '{}' is not available in the query "
-                "results.",
-                name));
-        }
-    }
+    void check_column_name(const std::string& name);
 
     // TileDB array being queried.
     std::shared_ptr<Array> array_;

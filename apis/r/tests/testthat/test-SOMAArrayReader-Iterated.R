@@ -1,5 +1,5 @@
 test_that("Iterated Interface from SOMAArrayReader", {
-    skip_if(!extended_tests() || covr_tests() || is_macos())
+    skip_if(!extended_tests() || covr_tests())
     skip_if_not_installed("pbmc3k.tiledb")      # a Suggests: pre-package 3k PBMC data
                                                 # see https://ghrr.github.io/drat/
     library(arrow)
@@ -84,7 +84,7 @@ test_that("Iterated Interface from SOMAArrayReader", {
 
 
 test_that("Iterated Interface from SOMA Classes", {
-    skip_if(!extended_tests() || covr_tests() || is_macos())
+    skip_if(!extended_tests() || covr_tests())
     skip_if_not_installed("pbmc3k.tiledb")      # a Suggests: pre-package 3k PBMC data
 
     tdir <- tempfile()
@@ -151,7 +151,7 @@ test_that("Iterated Interface from SOMA Classes", {
 })
 
 test_that("Iterated Interface from SOMA Sparse Matrix", {
-    skip_if(!extended_tests() || covr_tests() || is_macos())
+    skip_if(!extended_tests() || covr_tests())
     skip_if_not_installed("pbmc3k.tiledb")      # a Suggests: pre-package 3k PBMC data
 
     tdir <- tempfile()
@@ -188,7 +188,7 @@ test_that("Iterated Interface from SOMA Sparse Matrix", {
 })
 
 test_that("Dimension Point and Ranges Bounds", {
-    skip_if(!extended_tests() || covr_tests() || is_macos())
+    skip_if(!extended_tests() || covr_tests())
     ctx <- tiledbsoma::SOMATileDBContext$new()
     config <- as.character(tiledb::config(ctx$context()))
     human_experiment <- load_dataset("soma-exp-pbmc-small", tiledbsoma_ctx = ctx)

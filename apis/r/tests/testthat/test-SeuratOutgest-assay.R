@@ -1,5 +1,5 @@
 test_that("Load assay from ExperimentQuery mechanics", {
-  skip_if(!extended_tests() || is_macos())
+  skip_if(!extended_tests())
   skip_if_not_installed('SeuratObject', .MINIMUM_SEURAT_VERSION('c'))
 
   uri <- withr::local_tempdir("assay-experiment-query-whole")
@@ -117,8 +117,48 @@ test_that("Load assay from ExperimentQuery mechanics", {
   expect_error(query$to_seurat_assay(var_column_names = 'tomato'))
 })
 
+test_that("Load assay with SeuratObject v5 returns v3 assays", {
+  skip_if(!extended_tests())
+  skip_if_not_installed('SeuratObject', '4.9.9.9094')
+
+  withr::local_options(Seurat.object.assay.version = 'v5')
+  uri <- withr::local_tempdir("assay-experiment-query-v5-v3")
+  n_obs <- 20L
+  n_var <- 10L
+  experiment <- create_and_populate_experiment(
+    uri = uri,
+    n_obs = n_obs,
+    n_var = n_var,
+    X_layer_names = c("counts", "logcounts"),
+    mode = "READ"
+  )
+  on.exit(experiment$close())
+
+  query <- SOMAExperimentAxisQuery$new(
+    experiment = experiment,
+    measurement_name = "RNA"
+  )
+
+  expect_identical(getOption('Seurat.object.assay.version'), 'v5')
+  expect_no_condition(assay <- query$to_seurat_assay())
+  expect_identical(getOption('Seurat.object.assay.version'), 'v5')
+  expect_s4_class(assay, 'Assay')
+  expect_identical(dim(assay), c(n_var, n_obs))
+  expect_s4_class(SeuratObject::GetAssayData(assay, 'counts'), 'dgCMatrix')
+  expect_s4_class(SeuratObject::GetAssayData(assay, 'data'), 'dgCMatrix')
+  scale.data <- SeuratObject::GetAssayData(assay, 'scale.data')
+  expect_true(is.matrix(scale.data))
+  expect_equal(dim(scale.data), c(0, 0))
+  expect_equal(SeuratObject::Key(assay), 'rna_')
+  expect_equal(names(assay[[]]), query$var_df$attrnames())
+  expect_equal(rownames(assay), paste0('feature', seq_len(n_var) - 1L))
+  expect_equal(rownames(assay), paste0('feature', query$var_joinids()$as_vector()))
+  expect_equal(colnames(assay), paste0('cell', seq_len(n_obs) - 1L))
+  expect_equal(colnames(assay), paste0('cell', query$obs_joinids()$as_vector()))
+})
+
 test_that("Load assay from sliced ExperimentQuery", {
-  skip_if(!extended_tests() || is_macos())
+  skip_if(!extended_tests())
   skip_if_not_installed('SeuratObject', .MINIMUM_SEURAT_VERSION('c'))
 
   uri <- withr::local_tempdir("assay-experiment-query-sliced")
@@ -163,7 +203,7 @@ test_that("Load assay from sliced ExperimentQuery", {
 })
 
 test_that("Load assay from indexed ExperimentQuery", {
-  skip_if(!extended_tests() || is_macos())
+  skip_if(!extended_tests())
   skip_if_not_installed('SeuratObject', .MINIMUM_SEURAT_VERSION('c'))
   uri <- withr::local_tempdir("soma-experiment-query-value-filters")
   n_obs <- 1001L
