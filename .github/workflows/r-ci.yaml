@@ -139,8 +139,12 @@ jobs:
         run: cd apis/r && R CMD INSTALL $(ls -ltr tiledbsoma*.tar.gz)
         
       - name: Test locally
-        run: cd apis/r && Rscript -e 'testthat::test_local()'
-      
+        run: cd apis/r && R CMD check --no-vignettes --no-manual $(ls -ltr tiledbsoma*.tar.gz)
+
+      - name: Dump logs
+        run: cd apis/r && tools/r-ci.sh dump_logs
+        if: failure()
+        
       #- name: Test Linux
       #  if: ${{ matrix.covr == 'no' && matrix.os == 'ubuntu-latest'}}
       #  run: cd apis/r && tools/r-ci.sh run_tests
