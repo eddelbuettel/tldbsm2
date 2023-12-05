@@ -33,6 +33,10 @@ test_that("Basic mechanics", {
                              schema = asch)
 
   sdf$write(tbl0)
+
+  # Verify the array is still open for write
+  expect_equal(sdf$mode(), "WRITE")
+  expect_true(tiledb::tiledb_array_is_open(sdf$object))
   sdf$close()
 
   # Read back the data (ignore attributes)
@@ -619,6 +623,19 @@ test_that("SOMADataFrame can be updated", {
     levels(tbl1$GetColumnByName("rlvl")$as_vector()),
     c("green", "red", "blue")
   )
+  expect_length(tbl1[["rlvl"]], 10)
+
+  # Verify queryability
+  expect_s3_class(
+    tblq <- SOMADataFrameOpen(uri, mode = "READ")$read(value_filter = 'rlvl == "green"')$concat(),
+    "Table"
+  )
+  expect_length(tblq[["rlvl"]], 3)
+  expect_s3_class(
+    tblq <- SOMADataFrameOpen(uri, mode = "READ")$read(value_filter = 'rlvl %in% c("blue", "green")')$concat(),
+    "Table"
+  )
+  expect_length(tblq[["rlvl"]], 6)
 
   # Add a new ordered and update
   tbl0 <- tbl1
