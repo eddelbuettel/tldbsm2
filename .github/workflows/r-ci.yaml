@@ -23,11 +23,11 @@ env:
   TILEDBSOMA_SHA: "${{ github.sha }}"
 
 jobs:
-  lib:
-    uses: ./.github/workflows/artifacts.yaml
+  #lib:
+  #  uses: ./.github/workflows/artifacts.yaml
       
   ci:
-    needs: lib
+    #needs: lib
     strategy:
       matrix:
         include:
@@ -93,35 +93,35 @@ jobs:
       #  if: ${{ matrix.os == 'ubuntu-latest' }}
       #  run: sudo ldconfig
 
-      - name: "Get VER Substring"
-        uses: bhowell2/github-substring-action@1.0.2
-        id: versubstr
-        with:
-          value: ${{ env.TILEDBSOMA_VER }}
-          index_of_str: "refs/tags/"
-          fail_if_not_found: false
-          default_return_value: "unset"
+      # - name: "Get VER Substring"
+      #   uses: bhowell2/github-substring-action@1.0.2
+      #   id: versubstr
+      #   with:
+      #     value: ${{ env.TILEDBSOMA_VER }}
+      #     index_of_str: "refs/tags/"
+      #     fail_if_not_found: false
+      #     default_return_value: "unset"
 
-      - name: "Get SHA Substring"
-        uses: bhowell2/github-substring-action@1.0.2
-        id: shasubstr
-        with:
-          value: ${{ env.TILEDBSOMA_SHA }}
-          length_from_start: 7
+      # - name: "Get SHA Substring"
+      #   uses: bhowell2/github-substring-action@1.0.2
+      #   id: shasubstr
+      #   with:
+      #     value: ${{ env.TILEDBSOMA_SHA }}
+      #     length_from_start: 7
 
-      - name: "Show Substrings"
-        run: echo "VER " ${{ steps.versubstr.outputs.substring }} " and SHA " ${{ steps.shasubstr.outputs.substring }}
+      # - name: "Show Substrings"
+      #   run: echo "VER " ${{ steps.versubstr.outputs.substring }} " and SHA " ${{ steps.shasubstr.outputs.substring }}
        
-      - name: Download artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: libtiledbsoma-${{ matrix.arch_os }}-${{ steps.versubstr.outputs.substring }}-${{ steps.shasubstr.outputs.substring }}.tar.gz
+      # - name: Download artifact
+      #   uses: actions/download-artifact@v3
+      #   with:
+      #     name: libtiledbsoma-${{ matrix.arch_os }}-${{ steps.versubstr.outputs.substring }}-${{ steps.shasubstr.outputs.substring }}.tar.gz
     
-      - name: Move downloaded file
-        run: mv -v libtiledbsoma-${{ matrix.arch_os }}-${{steps.versubstr.outputs.substring }}-${{steps.shasubstr.outputs.substring }}.tar.gz apis/r/libtiledbsoma.tar.gz
+      # - name: Move downloaded file
+      #   run: mv -v libtiledbsoma-${{ matrix.arch_os }}-${{steps.versubstr.outputs.substring }}-${{steps.shasubstr.outputs.substring }}.tar.gz apis/r/libtiledbsoma.tar.gz
 
-      - name: Show files
-        run: ls -l apis/r/*.tar.gz
+      # - name: Show files
+      #   run: ls -l apis/r/*.tar.gz
 
       - name: Update packages
         run: Rscript -e 'update.packages(ask=FALSE)'
