@@ -81,8 +81,8 @@ jobs:
       - name: CMake
         uses: lukka/get-cmake@latest
 
-      - name: Show cmake
-        run: type -p cmake
+      #- name: Show cmake
+      #  run: type -p cmake
         
       #- name: MkVars
       #  run: mkdir ~/.R && echo "CXX17FLAGS=-Wno-deprecated-declarations -Wno-deprecated" > ~/.R/Makevars
@@ -127,32 +127,32 @@ jobs:
       - name: Update packages
         run: Rscript -e 'update.packages(ask=FALSE)'
 
-      - name: Get TileDB-R from r-universe just in case
-        run: Rscript -e 'bspm::disable(); options(repos = c(linux = "https://eddelbuettel.r-universe.dev/bin/linux/jammy/4.3/", cran = "https://cloud.r-project.org")); install.packages("tiledb")'
+      #- name: Get TileDB-R from r-universe just in case
+      #  run: Rscript -e 'bspm::disable(); options(repos = c(linux = "https://eddelbuettel.r-universe.dev/bin/linux/jammy/4.3/", cran = "https://cloud.r-project.org")); install.packages("tiledb")'
         
-      - name: Configure
-        run: cd apis/r && ./configure
+      #- name: Configure
+      #  run: cd apis/r && ./configure
         
       #- name: Test 
       #  if: ${{ matrix.covr == 'no' }}
       #  run: cd apis/r && tools/r-ci.sh run_tests
 
-      - name: Build tar.gz
-        run: cd apis/r && R CMD build --no-manual --no-build-vignettes .
+      #- name: Build tar.gz
+      #  run: cd apis/r && R CMD build --no-manual --no-build-vignettes .
 
-      - name: Install tar.gz
-        run: cd apis/r && R CMD INSTALL $(ls -1tr tiledbsoma*.tar.gz)
+      #- name: Install tar.gz
+      #  run: cd apis/r && R CMD INSTALL $(ls -1tr tiledbsoma*.tar.gz)
         
-      - name: Test locally
-        run: cd apis/r && CI=true _R_CHECK_TIMINGS_=0 _R_CHECK_TESTS_NLINES_=0 R CMD check --no-vignettes --no-manual $(ls -1tr tiledbsoma*.tar.gz)
+      #- name: Test locally
+      #  run: cd apis/r && CI=true _R_CHECK_TIMINGS_=0 _R_CHECK_TESTS_NLINES_=0 R CMD check --no-vignettes --no-manual $(ls -1tr tiledbsoma*.tar.gz)
 
-      - name: Dump logs
-        run: cd apis/r && tools/r-ci.sh dump_logs
-        if: failure()
+      #- name: Dump logs
+      #  run: cd apis/r && tools/r-ci.sh dump_logs
+      #  if: failure()
         
-      #- name: Test Linux
-      #  if: ${{ matrix.covr == 'no' && matrix.os == 'ubuntu-latest'}}
-      #  run: cd apis/r && tools/r-ci.sh run_tests
+      - name: Test Linux
+        if: ${{ matrix.covr == 'no' && matrix.os == 'ubuntu-latest'}}
+        run: cd apis/r && tools/r-ci.sh run_tests
 
       #- name: Test Mac
       #  if: ${{ matrix.covr == 'no' && matrix.os == 'macOS-latest'}}
