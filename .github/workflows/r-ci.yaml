@@ -1,167 +1,118 @@
-name: r-ci
+name: TileDB-SOMA R CI
 
 on:
-  workflow_dispatch:
-  workflow_call:
-  #pull_request:
-  #  paths-ignore:
-  #    - "apis/python/**"
-  #    - ".pre-commit-config.yaml"
+  pull_request:
+    paths-ignore:
+      - "apis/python/**"
+      - ".pre-commit-config.yaml"
   push:
-    branches: [main, master]
-  #release:
+    #branches:
+    #  - main
+    #  - 'release-*'
+  workflow_dispatch:
 
 env:
   COVERAGE_FLAGS: "r"
   COVERAGE_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-  ## for workflows triggered by release this is the release tag created (cf https://docs.github.com/en/actions/learn-github-actions/contexts)
-  ## note that this is filtered below and then used via 'steps.versubstr.outputs.substring'
-  ## also note that in a non-release trigger the value is simply 'unset' (which still works for us)
-  TILEDBSOMA_VER: "${{ github.ref }}"
-  ## the commit sha that triggered the workflow (cf https://docs.github.com/en/actions/learn-github-actions/contexts)
-  ## note that this is shortened below from the full-length sha1 sum to the common first seven letters, used via steps.shasubstr.outputs.substring
-  TILEDBSOMA_SHA: "${{ github.sha }}"
+  _R_CHECK_TESTS_NLINES_: 0
 
 jobs:
-  #lib:
-  #  uses: ./.github/workflows/artifacts.yaml
-      
   ci:
-    #needs: lib
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - name: linux
-            os: ubuntu-latest
+          #- name: linux
+          #  os: ubuntu-latest
+          #  covr: 'no'
+          - name: macos
+            os: macOS-latest
             covr: 'no'
-            arch_os: linux-x86_64
-          # - name: macos
-          #   os: macOS-latest
-          #   covr: 'no'
-          #   arch_os: macos-x86_64
-          - name: coverage
-            os: ubuntu-latest
-            covr: 'yes'
-            arch_os: linux-x86_64
+          #- name: coverage
+          #  os: ubuntu-latest
+          #  covr: 'yes'
 
-      fail-fast: false
-            
     runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v3
 
-      - name: Linux Platform
+      - name: Show matrix OS
+        run: echo "matrix.os:" ${{ matrix.os }}
+
+      - name: Linux CPU info
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: cat /proc/cpuinfo
-        
+
+      - name: MacOS CPU info
+        if: ${{ matrix.os == 'macOS-latest' }}
+        run: sysctl -a | grep cpu
+
       - name: Bootstrap
         run: cd apis/r && tools/r-ci.sh bootstrap
-
-      #- name: Install 'old' tiledb-r to satisfy its dependencies
-      #  run: cd apis/r && tools/r-ci.sh tiledb-r
-
-      #- name: Install new tiledb-r 0.20.2 
-      #  run: cd apis/r && Rscript -e 'if (Sys.info()[["sysname"]] == "Linux") bspm::disable(); install.packages("tiledb", repos = c("https://tiledb-inc.r-universe.dev", "https://cloud.r-project.org"))' 
 
       - name: Install BioConductor package SingleCellExperiment
         run: cd apis/r && tools/r-ci.sh install_bioc SingleCellExperiment
 
-      # - name: Install r-universe build of tiledb-r (macOS)
-      #   if: ${{ matrix.os == 'macOS-latest' }}
-      #   run: cd apis/r && Rscript -e "install.packages('tiledb', repos = c('https://eddelbuettel.r-universe.dev', 'https://cloud.r-project.org'))"
+      # Uncomment these next two stanzas as needed whenever we've just released a new tiledb-r for
+      # which source is available but CRAN releases (and hence update r2u binaries) are not yet:
 
-      # - name: Install r-universe build of tiledb-r (linux)
-      #   if: ${{ matrix.os != 'macOS-latest' }}
-      #   run: cd apis/r && Rscript -e "options(bspm.version.check=TRUE); install.packages('tiledb', repos = c('https://eddelbuettel.r-universe.dev/bin/linux/jammy/4.3/', 'https://cloud.r-project.org'))"  
-        
+      - name: Install r-universe build of tiledb-r (macOS)
+        if: ${{ matrix.os == 'macOS-latest' }}
+        run: cd apis/r && Rscript -e "install.packages('tiledb', repos = c('https://eddelbuettel.r-universe.dev', 'https://cloud.r-project.org'))"
+
+      - name: Install r-universe build of tiledb-r (linux)
+        if: ${{ matrix.os != 'macOS-latest' }}
+        run: cd apis/r && Rscript -e "options(bspm.version.check=TRUE); install.packages('tiledb', repos = c('https://eddelbuettel.r-universe.dev/bin/linux/jammy/4.3/', 'https://cloud.r-project.org'))"
+
+      - name: Install r-universe build of SeuratObject (macOS)
+        if: ${{ matrix.os == 'macOS-latest' }}
+        run: cd apis/r && Rscript -e "install.packages('SeuratObject', repos = c('https://mojaveazure.r-universe.dev', 'https://cloud.r-project.org'))"
+
+      - name: Install r-universe build of SeuratObject (linux)
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: cd apis/r && Rscript -e "options(bspm.version.check=TRUE); install.packages('SeuratObject', repos = c('https://mojaveazure.r-universe.dev/bin/linux/jammy/4.3/', 'https://cloud.r-project.org'))"
+
       - name: Dependencies
         run: cd apis/r && tools/r-ci.sh install_all
 
       - name: CMake
         uses: lukka/get-cmake@latest
 
-      #- name: Show cmake
-      #  run: type -p cmake
-        
       #- name: MkVars
       #  run: mkdir ~/.R && echo "CXX17FLAGS=-Wno-deprecated-declarations -Wno-deprecated" > ~/.R/Makevars
 
       #- name: Build and install libtiledbsoma
-      #  run: sudo scripts/bld --prefix=/usr/local 
+      #  run: sudo scripts/bld --prefix=/usr/local
 
       #- name: Call ldconfig
       #  if: ${{ matrix.os == 'ubuntu-latest' }}
       #  run: sudo ldconfig
-
-      # - name: "Get VER Substring"
-      #   uses: bhowell2/github-substring-action@1.0.2
-      #   id: versubstr
-      #   with:
-      #     value: ${{ env.TILEDBSOMA_VER }}
-      #     index_of_str: "refs/tags/"
-      #     fail_if_not_found: false
-      #     default_return_value: "unset"
-
-      # - name: "Get SHA Substring"
-      #   uses: bhowell2/github-substring-action@1.0.2
-      #   id: shasubstr
-      #   with:
-      #     value: ${{ env.TILEDBSOMA_SHA }}
-      #     length_from_start: 7
-
-      # - name: "Show Substrings"
-      #   run: echo "VER " ${{ steps.versubstr.outputs.substring }} " and SHA " ${{ steps.shasubstr.outputs.substring }}
-       
-      # - name: Download artifact
-      #   uses: actions/download-artifact@v3
-      #   with:
-      #     name: libtiledbsoma-${{ matrix.arch_os }}-${{ steps.versubstr.outputs.substring }}-${{ steps.shasubstr.outputs.substring }}.tar.gz
-    
-      # - name: Move downloaded file
-      #   run: mv -v libtiledbsoma-${{ matrix.arch_os }}-${{steps.versubstr.outputs.substring }}-${{steps.shasubstr.outputs.substring }}.tar.gz apis/r/libtiledbsoma.tar.gz
-
-      # - name: Show files
-      #   run: ls -l apis/r/*.tar.gz
-
-      - name: Update packages
+      #
+      - name: Update Packages
         run: Rscript -e 'update.packages(ask=FALSE)'
 
-      #- name: Get TileDB-R from r-universe just in case
-      #  run: Rscript -e 'bspm::disable(); options(repos = c(linux = "https://eddelbuettel.r-universe.dev/bin/linux/jammy/4.3/", cran = "https://cloud.r-project.org")); install.packages("tiledb")'
-        
-      #- name: Configure
-      #  run: cd apis/r && ./configure
-        
-      #- name: Test 
-      #  if: ${{ matrix.covr == 'no' }}
-      #  run: cd apis/r && tools/r-ci.sh run_tests
+      - name: Build Package
+        run: cd apis/r && R CMD build --no-build-vignettes --no-manual .
 
-      #- name: Build tar.gz
-      #  run: cd apis/r && R CMD build --no-manual --no-build-vignettes .
+      - name: Install Package
+        run: cd apis/r && R CMD INSTALL $(ls -1tr *.tar.gz | tail -1)
 
-      #- name: Install tar.gz
-      #  run: cd apis/r && R CMD INSTALL $(ls -1tr tiledbsoma*.tar.gz)
-        
-      #- name: Test locally
-      #  run: cd apis/r && CI=true _R_CHECK_TIMINGS_=0 _R_CHECK_TESTS_NLINES_=0 R CMD check --no-vignettes --no-manual $(ls -1tr tiledbsoma*.tar.gz)
+      - name: Diagnostics
+        run: Rscript -e 'print(Sys.info())'
 
-      #- name: Dump logs
-      #  run: cd apis/r && tools/r-ci.sh dump_logs
-      #  if: failure()
+      - name: Downgrade TileDB-R if needed
+        run: cd apis/r && Rscript tools/controlled_downgrade.R
         
-      - name: Test Linux
-        if: ${{ matrix.covr == 'no' && matrix.os == 'ubuntu-latest'}}
+      - name: Test
+        if: ${{ matrix.covr == 'no' }}
         run: cd apis/r && tools/r-ci.sh run_tests
-
-      #- name: Test Mac
-      #  if: ${{ matrix.covr == 'no' && matrix.os == 'macOS-latest'}}
-      #  run: cd apis/r && CI="" tools/r-ci.sh run_tests
-        
-      #- name: View Install Output
-      #  run: cat $HOME/work/TileDB-SOMA/TileDB-SOMA/apis/r/tiledbsoma.Rcheck/00install.out
-      #  if: failure()
 
       - name: Coverage
         if: ${{ matrix.os == 'ubuntu-latest' && matrix.covr == 'yes' }}
         run: apis/r/tools/r-ci.sh coverage
+
+      - name: View Logs
+        run: apis/r/tools/r-ci.sh dump_logs
+        if: failure()
+
