@@ -35,6 +35,8 @@ jobs:
       #  run: cd apis/r/tiledbsoma.Rcheck/tests && cat testthat.Rout
       - name: Install pkgdown
         run: Rscript -e 'install.packages("pkgdown")'
+      - name: Install pandoc
+        run: apt install --yes --no-install-recommends pandoc
       - name: Run pkgdown
         run: cd apis/r && Rscript -e 'pkgdown::build_site(".")'
 
