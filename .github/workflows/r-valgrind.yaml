@@ -6,8 +6,8 @@ on:
   # use a regular nighly build as well (time is UTC)
   #schedule:
   #  - cron: "23 4 * * *"
-  push:
-    branches: [main, master]
+  #push:
+  #  branches: [main, master]
 
 jobs:
   r-valgrind:

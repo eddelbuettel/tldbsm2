@@ -1,11 +1,11 @@
 /**
- * @file   common.h
+ * @file   soma_context.h
  *
  * @section LICENSE
  *
  * The MIT License
  *
- * @copyright Copyright (c) 2022 TileDB, Inc.
+ * @copyright Copyright (c) 2024 TileDB, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -27,34 +27,27 @@
  *
  * @section DESCRIPTION
  *
- *   This declares the common functions in the API
+ *   This file defines the SOMAContext class.
  */
-
-#ifndef TILEDBSOMA_COMMON_H
-#define TILEDBSOMA_COMMON_H
-
-#include <stdexcept>  // for windows: error C2039: 'runtime_error': is not a member of 'std'
-#include <string>
-#include <tiledb/tiledb>
+#include "soma_context.h"
+#include <thread_pool/thread_pool.h>
 
 namespace tiledbsoma {
 
-using MetadataValue = std::tuple<tiledb_datatype_t, uint32_t, const void*>;
-enum MetadataInfo { dtype = 0, num, value };
-
-class TileDBSOMAError : public std::runtime_error {
-   public:
-    explicit TileDBSOMAError(const char* m)
-        : std::runtime_error(m){};
-    explicit TileDBSOMAError(std::string m)
-        : std::runtime_error(m.c_str()){};
-
-   public:
-    virtual const char* what() const noexcept override {
-        return std::runtime_error::what();
+std::shared_ptr<ThreadPool>& SOMAContext::thread_pool() {
+    const std::lock_guard<std::mutex> lock(thread_pool_mutex_);
+    // The first thread that gets here will create the context thread pool
+    if (thread_pool_ == nullptr) {
+        auto cfg = tiledb_config();
+        int concurrency = 10;
+        if (cfg.find("sm.compute_concurrency_level") != cfg.end()) {
+            concurrency = std::stoi(cfg["sm.compute_concurrency_level"]);
+        }
+        int thread_count = std::max(1, concurrency / 2);
+        if (thread_count > 1) {
+            thread_pool_ = std::make_shared<ThreadPool>(thread_count);
+        }
     }
-};
-
-};  // namespace tiledbsoma
-
-#endif  // TILEDBSOMA_COMMON_H
+    return thread_pool_;
+}
+}  // namespace tiledbsoma

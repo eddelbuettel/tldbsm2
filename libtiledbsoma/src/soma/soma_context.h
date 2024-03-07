@@ -1,11 +1,11 @@
 /**
- * @file   soma_experiment.h
+ * @file   soma_context.h
  *
  * @section LICENSE
  *
  * The MIT License
  *
- * @copyright Copyright (c) 2023 TileDB, Inc.
+ * @copyright Copyright (c) 2024 TileDB, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -27,70 +27,66 @@
  *
  * @section DESCRIPTION
  *
- *   This file defines the SOMAExperiment class.
+ * This file defines the SOMAContext class.
  */
 
-#ifndef SOMA_EXPERIMENT
-#define SOMA_EXPERIMENT
+#ifndef SOMA_CONTEXT
+#define SOMA_CONTEXT
 
+#include <map>
+#include <mutex>
+#include <string>
 #include <tiledb/tiledb>
 
-#include "soma_collection.h"
-#include "soma_dataframe.h"
-
 namespace tiledbsoma {
+class ThreadPool;
 
 using namespace tiledb;
-class SOMAExperiment : public SOMACollection {
+
+class SOMAContext {
    public:
-    //===================================================================
-    //= public static
-    //===================================================================
-
-    /**
-     * @brief Create a SOMAExperiment object at the given URI.
-     *
-     * @param uri URI to create the SOMAExperiment
-     * @param schema TileDB ArraySchema
-     * @param platform_config Optional config parameter dictionary
-     */
-    static std::unique_ptr<SOMAExperiment> create(
-        std::string_view uri,
-        ArraySchema schema,
-        std::shared_ptr<SOMAContext> ctx);
-
     //===================================================================
     //= public non-static
     //===================================================================
+    SOMAContext()
+        : ctx_(std::make_shared<Context>(Config({})))
+        , thread_pool_mutex_(){};
 
-    SOMAExperiment(
-        OpenMode mode,
-        std::string_view uri,
-        std::shared_ptr<SOMAContext> ctx,
-        std::optional<std::pair<uint64_t, uint64_t>> timestamp = std::nullopt)
-        : SOMACollection(mode, uri, ctx, timestamp) {
+    SOMAContext(std::map<std::string, std::string> platform_config)
+        : ctx_(std::make_shared<Context>(Config(platform_config)))
+        , thread_pool_mutex_(){};
+
+    bool operator==(const SOMAContext& other) const {
+        return ctx_ == other.ctx_;
     }
 
-    SOMAExperiment(const SOMACollection& other)
-        : SOMACollection(other) {
+    std::shared_ptr<Context> tiledb_ctx() const {
+        return ctx_;
     }
 
-    SOMAExperiment() = delete;
-    SOMAExperiment(const SOMAExperiment&) = default;
-    SOMAExperiment(SOMAExperiment&&) = default;
-    ~SOMAExperiment() = default;
+    std::map<std::string, std::string> tiledb_config() const {
+        std::map<std::string, std::string> cfg;
+        for (auto& it : ctx_->config())
+            cfg[it.first] = it.second;
+        return cfg;
+    }
+
+    std::shared_ptr<ThreadPool>& thread_pool();
 
    private:
     //===================================================================
     //= private non-static
     //===================================================================
 
-    // Primary annotations on the observation axis
-    std::shared_ptr<SOMADataFrame> obs_;
+    // TileDB context
+    std::shared_ptr<Context> ctx_;
 
-    // A collection of named measurements
-    std::shared_ptr<SOMACollection> ms_;
+    // Threadpool
+    std::shared_ptr<ThreadPool> thread_pool_ = nullptr;
+
+    // Semaphore to create and use the thread_pool
+    std::mutex thread_pool_mutex_;
 };
 }  // namespace tiledbsoma
 
-#endif  // SOMA_EXPERIMENT
+#endif  // SOMA_CONTEXT

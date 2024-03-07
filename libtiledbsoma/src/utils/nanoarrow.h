@@ -19,9 +19,9 @@
 #define NANOARROW_BUILD_ID_H_INCLUDED
 
 #define NANOARROW_VERSION_MAJOR 0
-#define NANOARROW_VERSION_MINOR 4
+#define NANOARROW_VERSION_MINOR 5
 #define NANOARROW_VERSION_PATCH 0
-#define NANOARROW_VERSION "0.4.0-SNAPSHOT"
+#define NANOARROW_VERSION "0.5.0-SNAPSHOT"
 
 #define NANOARROW_VERSION_INT                                        \
   (NANOARROW_VERSION_MAJOR * 10000 + NANOARROW_VERSION_MINOR * 100 + \
@@ -240,6 +240,11 @@ typedef int ArrowErrorCode;
 #if defined(NANOARROW_DEBUG)
 #define ArrowErrorCode NANOARROW_CHECK_RETURN_ATTRIBUTE ArrowErrorCode
 #endif
+
+/// \brief Flags supported by ArrowSchemaViewInit()
+/// \ingroup nanoarrow-schema-view
+#define NANOARROW_FLAG_ALL_SUPPORTED \
+  (ARROW_FLAG_DICTIONARY_ORDERED | ARROW_FLAG_NULLABLE | ARROW_FLAG_MAP_KEYS_SORTED)
 
 /// \brief Error type containing a UTF-8 encoded message.
 /// \ingroup nanoarrow-errors
@@ -716,6 +721,9 @@ struct ArrowBufferAllocator {
   void* private_data;
 };
 
+typedef void (*ArrowBufferDeallocatorCallback)(struct ArrowBufferAllocator* allocator,
+                                               uint8_t* ptr, int64_t size);
+
 /// \brief An owning mutable view of a buffer
 /// \ingroup nanoarrow-buffer
 struct ArrowBuffer {
@@ -948,6 +956,28 @@ static inline void ArrowDecimalSetInt(struct ArrowDecimal* decimal, int64_t valu
   decimal->words[decimal->low_word_index] = value;
 }
 
+/// \brief Negate the value of this decimal in place
+/// \ingroup nanoarrow-utils
+static inline void ArrowDecimalNegate(struct ArrowDecimal* decimal) {
+  uint64_t carry = 1;
+
+  if (decimal->low_word_index == 0) {
+    for (int i = 0; i < decimal->n_words; i++) {
+      uint64_t elem = decimal->words[i];
+      elem = ~elem + carry;
+      carry &= (elem == 0);
+      decimal->words[i] = elem;
+    }
+  } else {
+    for (int i = decimal->low_word_index; i >= 0; i--) {
+      uint64_t elem = decimal->words[i];
+      elem = ~elem + carry;
+      carry &= (elem == 0);
+      decimal->words[i] = elem;
+    }
+  }
+}
+
 /// \brief Copy bytes from a buffer into this decimal
 /// \ingroup nanoarrow-utils
 static inline void ArrowDecimalSetBytes(struct ArrowDecimal* decimal,
@@ -1009,6 +1039,9 @@ static inline void ArrowDecimalSetBytes(struct ArrowDecimal* decimal,
   NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowBufferDeallocator)
 #define ArrowErrorSet NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowErrorSet)
 #define ArrowLayoutInit NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowLayoutInit)
+#define ArrowDecimalSetDigits NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowDecimalSetDigits)
+#define ArrowDecimalAppendDigitsToBuffer \
+  NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowDecimalAppendDigitsToBuffer)
 #define ArrowSchemaInit NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowSchemaInit)
 #define ArrowSchemaInitFromType \
   NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowSchemaInitFromType)
@@ -1138,10 +1171,8 @@ struct ArrowBufferAllocator ArrowBufferAllocatorDefault(void);
 /// attach a custom deallocator to an ArrowBuffer. This may be used to
 /// avoid copying an existing buffer that was not allocated using the
 /// infrastructure provided here (e.g., by an R or Python object).
-struct ArrowBufferAllocator ArrowBufferDeallocator(
-    void (*custom_free)(struct ArrowBufferAllocator* allocator, uint8_t* ptr,
-                        int64_t size),
-    void* private_data);
+struct ArrowBufferAllocator ArrowBufferDeallocator(ArrowBufferDeallocatorCallback,
+                                                   void* private_data);
 
 /// @}
 
@@ -1241,6 +1272,14 @@ void ArrowLayoutInit(struct ArrowLayout* layout, enum ArrowType storage_type);
 
 /// \brief Create a string view from a null-terminated string
 static inline struct ArrowStringView ArrowCharView(const char* value);
+
+/// \brief Sets the integer value of an ArrowDecimal from a string
+ArrowErrorCode ArrowDecimalSetDigits(struct ArrowDecimal* decimal,
+                                     struct ArrowStringView value);
+
+/// \brief Get the integer value of an ArrowDecimal as string
+ArrowErrorCode ArrowDecimalAppendDigitsToBuffer(const struct ArrowDecimal* decimal,
+                                                struct ArrowBuffer* buffer);
 
 /// @}
 
@@ -2157,6 +2196,8 @@ static inline void ArrowBufferInit(struct ArrowBuffer* buffer) {
 
 static inline ArrowErrorCode ArrowBufferSetAllocator(
     struct ArrowBuffer* buffer, struct ArrowBufferAllocator allocator) {
+  // This is not a perfect test for "has a buffer already been allocated"
+  // but is likely to catch most cases.
   if (buffer->data == NULL) {
     buffer->allocator = allocator;
     return NANOARROW_OK;
@@ -2166,20 +2207,15 @@ static inline ArrowErrorCode ArrowBufferSetAllocator(
 }
 
 static inline void ArrowBufferReset(struct ArrowBuffer* buffer) {
-  if (buffer->data != NULL) {
-    buffer->allocator.free(&buffer->allocator, (uint8_t*)buffer->data,
-                           buffer->capacity_bytes);
-    buffer->data = NULL;
-  }
-
-  buffer->capacity_bytes = 0;
-  buffer->size_bytes = 0;
+  buffer->allocator.free(&buffer->allocator, (uint8_t*)buffer->data,
+                         buffer->capacity_bytes);
+  ArrowBufferInit(buffer);
 }
 
 static inline void ArrowBufferMove(struct ArrowBuffer* src, struct ArrowBuffer* dst) {
   memcpy(dst, src, sizeof(struct ArrowBuffer));
   src->data = NULL;
-  ArrowBufferReset(src);
+  ArrowBufferInit(src);
 }
 
 static inline ArrowErrorCode ArrowBufferResize(struct ArrowBuffer* buffer,
@@ -3278,6 +3314,10 @@ static inline ArrowErrorCode ArrowArrayAppendInterval(struct ArrowArray* array,
     }
     default:
       return EINVAL;
+  }
+
+  if (private_data->bitmap.buffer.data != NULL) {
+    NANOARROW_RETURN_NOT_OK(ArrowBitmapAppend(ArrowArrayValidityBitmap(array), 1, 1));
   }
 
   array->length++;

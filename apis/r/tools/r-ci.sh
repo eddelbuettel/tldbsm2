@@ -403,6 +403,7 @@ Coverage() {
         COVR="true" Rscript -e 'setwd("apis/r"); library(covr); res <- package_coverage(relative_path="../..", line_exclusion=list("apis/r/src/nanoarrow.c", "apis/r/src/nanoarrow.h", "apis/r/R/roxygen.R", quiet=FALSE)); print(res); codecov(coverage=res, token="", flags="r")'
     fi
 }
+
 RunTests() {
     echo "Building with: R CMD build ${R_BUILD_ARGS}"
     R CMD build ${R_BUILD_ARGS} .

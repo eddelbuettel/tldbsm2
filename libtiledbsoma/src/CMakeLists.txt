@@ -54,9 +54,11 @@ add_library(TILEDB_SOMA_OBJECTS OBJECT
   ${CMAKE_CURRENT_SOURCE_DIR}/soma/managed_query.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/soma/soma_array.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/soma/soma_group.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/soma/soma_object.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/soma/soma_collection.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/soma/soma_experiment.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/soma/soma_measurement.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/soma/soma_context.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/soma/soma_dataframe.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/soma/soma_dense_ndarray.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/soma/soma_sparse_ndarray.cc
@@ -67,6 +69,7 @@ add_library(TILEDB_SOMA_OBJECTS OBJECT
   ${CMAKE_CURRENT_SOURCE_DIR}/utils/stats.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/utils/util.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/utils/version.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/utils/nanoarrow.c
 
   ${CMAKE_CURRENT_SOURCE_DIR}/external/src/thread_pool/thread_pool.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/external/src/thread_pool/status.cc
@@ -189,6 +192,7 @@ endif()
 install(FILES 
   ${CMAKE_CURRENT_SOURCE_DIR}/soma/enums.h
   ${CMAKE_CURRENT_SOURCE_DIR}/soma/logger_public.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/soma/soma_context.h 
   ${CMAKE_CURRENT_SOURCE_DIR}/soma/managed_query.h
   ${CMAKE_CURRENT_SOURCE_DIR}/soma/array_buffers.h  
   ${CMAKE_CURRENT_SOURCE_DIR}/soma/column_buffer.h  
@@ -207,6 +211,13 @@ install(FILES
 install(FILES
   ${CMAKE_CURRENT_SOURCE_DIR}/reindexer/reindexer.h
   DESTINATION "include/tiledbsoma/reindexer/"
+)
+
+install(FILES
+  ${CMAKE_CURRENT_SOURCE_DIR}/utils/carrow.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/utils/nanoarrow.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/utils/nanoarrow.hpp
+  DESTINATION "include/tiledbsoma/utils/"
 )
 
 install(FILES

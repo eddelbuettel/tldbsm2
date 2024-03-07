@@ -41,12 +41,15 @@ ${R_HOME}/bin/Rscript tools/get_tarball.R
 ${R_HOME}/bin/Rscript tools/check_cmake_and_git.R
 
 ## Make libtiledbsoma library using cmake (and an added git dependency)
+export CC="`${R_HOME}/bin/R CMD config CC`"
+export CXX="`${R_HOME}/bin/R CMD config CXX`"
+export CMAKE_OSX_ARCHITECTURES="`uname -m`"
 tools/build_libtiledbsoma.sh
 
 pkgincl="-I../inst/tiledb/include -I../inst/tiledbsoma/include"
 pkglibs="-ltiledb -L../inst/tiledb/lib -ltiledbsoma -L../inst/tiledbsoma/lib"
 rpath="-Wl,-rpath,'\$\$ORIGIN/../tiledb/lib' -Wl,-rpath,'\$\$ORIGIN/../tiledbsoma/lib'"
-macosver=`${R_HOME}/bin/Rscript -e 'if (Sys.info()["machine"] == "x86_64" && Sys.info()["sysname"] == "Darwin") cat("-mmacosx-version-min=10.14") else cat("")'`
+macosver=`${R_HOME}/bin/Rscript -e 'if (Sys.info()["sysname"] == "Darwin") cat("-mmacosx-version-min=11.0") else cat("")'`
 
 sed -e "s|@tiledb_include@|$pkgincl |" \
     -e "s|@tiledb_libs@|$pkglibs|" \
