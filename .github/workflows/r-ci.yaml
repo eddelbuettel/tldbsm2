@@ -26,12 +26,12 @@ jobs:
           - name: linux
             os: ubuntu-latest
             covr: 'no'
-          - name: macos
-            os: macOS-latest
-            covr: 'no'
-          - name: coverage
-            os: ubuntu-latest
-            covr: 'yes'
+          #- name: macos
+          #  os: macOS-latest
+          #  covr: 'no'
+          #- name: coverage
+          #  os: ubuntu-latest
+          #  covr: 'yes'
 
     runs-on: ${{ matrix.os }}
 
@@ -77,8 +77,8 @@ jobs:
       - name: Dependencies
         run: cd apis/r && tools/r-ci.sh install_all
 
-      - name: CMake
-        uses: lukka/get-cmake@latest
+      #- name: CMake
+      #  uses: lukka/get-cmake@latest
 
       #- name: MkVars
       #  run: mkdir ~/.R && echo "CXX17FLAGS=-Wno-deprecated-declarations -Wno-deprecated" > ~/.R/Makevars
@@ -90,8 +90,8 @@ jobs:
       #  if: ${{ matrix.os == 'ubuntu-latest' }}
       #  run: sudo ldconfig
       #
-      - name: Update Packages
-        run: Rscript -e 'update.packages(ask=FALSE)'
+      #- name: Update Packages
+      #  run: Rscript -e 'update.packages(ask=FALSE)'
 
       # - name: Build Package
       #   run: cd apis/r && R CMD build --no-build-vignettes --no-manual .
