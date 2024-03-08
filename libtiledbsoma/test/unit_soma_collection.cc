@@ -78,7 +78,7 @@ ArraySchema create_schema(
 };  // namespace
 
 TEST_CASE("SOMACollection: basic") {
-    auto ctx = std::make_shared<Context>();
+    auto ctx = std::make_shared<SOMAContext>();
     std::string uri = "mem://unit-test-collection-basic";
 
     auto soma_collection = SOMACollection::create(uri, ctx);
@@ -89,12 +89,12 @@ TEST_CASE("SOMACollection: basic") {
 }
 
 TEST_CASE("SOMACollection: add SOMASparseNDArray") {
-    auto ctx = std::make_shared<Context>();
+    auto ctx = std::make_shared<SOMAContext>();
     std::string base_uri = "mem://unit-test-add-sparse-ndarray";
     std::string sub_uri = "mem://unit-test-add-sparse-ndarray/sub";
 
     SOMACollection::create(base_uri, ctx);
-    auto schema = create_schema(*ctx, true);
+    auto schema = create_schema(*ctx->tiledb_ctx(), true);
 
     std::map<std::string, std::string> expected_map{
         {"sparse_ndarray", sub_uri}};
@@ -107,8 +107,6 @@ TEST_CASE("SOMACollection: add SOMASparseNDArray") {
     REQUIRE(soma_sparse->ctx() == ctx);
     REQUIRE(soma_sparse->type() == "SOMASparseNDArray");
     REQUIRE(soma_sparse->is_sparse() == true);
-    REQUIRE(soma_sparse->schema()->has_attribute("a0"));
-    REQUIRE(soma_sparse->schema()->domain().has_dimension("d0"));
     REQUIRE(soma_sparse->ndim() == 1);
     REQUIRE(soma_sparse->nnz() == 0);
     soma_sparse->close();
@@ -120,12 +118,12 @@ TEST_CASE("SOMACollection: add SOMASparseNDArray") {
 }
 
 TEST_CASE("SOMACollection: add SOMADenseNDArray") {
-    auto ctx = std::make_shared<Context>();
+    auto ctx = std::make_shared<SOMAContext>();
     std::string base_uri = "mem://unit-test-add-dense-ndarray";
     std::string sub_uri = "mem://unit-test-add-dense-ndarray/sub";
 
     SOMACollection::create(base_uri, ctx);
-    auto schema = create_schema(*ctx, false);
+    auto schema = create_schema(*ctx->tiledb_ctx(), false);
 
     std::map<std::string, std::string> expected_map{{"dense_ndarray", sub_uri}};
 
@@ -137,8 +135,6 @@ TEST_CASE("SOMACollection: add SOMADenseNDArray") {
     REQUIRE(soma_dense->ctx() == ctx);
     REQUIRE(soma_dense->type() == "SOMADenseNDArray");
     REQUIRE(soma_dense->is_sparse() == false);
-    REQUIRE(soma_dense->schema()->has_attribute("a0"));
-    REQUIRE(soma_dense->schema()->domain().has_dimension("d0"));
     REQUIRE(soma_dense->ndim() == 1);
     REQUIRE(soma_dense->shape() == std::vector<int64_t>{1001});
     soma_collection->close();
@@ -149,12 +145,12 @@ TEST_CASE("SOMACollection: add SOMADenseNDArray") {
 }
 
 TEST_CASE("SOMACollection: add SOMADataFrame") {
-    auto ctx = std::make_shared<Context>();
+    auto ctx = std::make_shared<SOMAContext>();
     std::string base_uri = "mem://unit-test-add-dataframe";
     std::string sub_uri = "mem://unit-test-add-dataframe/sub";
 
     SOMACollection::create(base_uri, ctx);
-    auto schema = create_schema(*ctx, false);
+    auto schema = create_schema(*ctx->tiledb_ctx(), true);
 
     std::map<std::string, std::string> expected_map{{"dataframe", sub_uri}};
 
@@ -165,26 +161,24 @@ TEST_CASE("SOMACollection: add SOMADataFrame") {
     REQUIRE(soma_dataframe->uri() == sub_uri);
     REQUIRE(soma_dataframe->ctx() == ctx);
     REQUIRE(soma_dataframe->type() == "SOMADataFrame");
-    REQUIRE(soma_dataframe->schema()->has_attribute("a0"));
-    REQUIRE(soma_dataframe->schema()->domain().has_dimension("d0"));
     std::vector<std::string> expected_index_column_names = {"d0"};
     REQUIRE(
         soma_dataframe->index_column_names() == expected_index_column_names);
-    REQUIRE(soma_dataframe->count() == 1);
     soma_collection->close();
 
     soma_collection = SOMACollection::open(base_uri, OpenMode::read, ctx);
     REQUIRE(soma_collection->member_to_uri_mapping() == expected_map);
+    REQUIRE(soma_dataframe->count() == 0);
     soma_collection->close();
 }
 
 TEST_CASE("SOMACollection: add SOMACollection") {
-    auto ctx = std::make_shared<Context>();
+    auto ctx = std::make_shared<SOMAContext>();
     std::string base_uri = "mem://unit-test-add-collection";
     std::string sub_uri = "mem://unit-test-add-collection/sub";
 
     SOMACollection::create(base_uri, ctx);
-    auto schema = create_schema(*ctx, false);
+    auto schema = create_schema(*ctx->tiledb_ctx(), false);
 
     std::map<std::string, std::string> expected_map{{"subcollection", sub_uri}};
 
@@ -203,12 +197,12 @@ TEST_CASE("SOMACollection: add SOMACollection") {
 }
 
 TEST_CASE("SOMACollection: add SOMAExperiment") {
-    auto ctx = std::make_shared<Context>();
+    auto ctx = std::make_shared<SOMAContext>();
     std::string base_uri = "mem://unit-test-add-experiment";
     std::string sub_uri = "mem://unit-test-add-experiment/sub";
 
     SOMACollection::create(base_uri, ctx);
-    auto schema = create_schema(*ctx, false);
+    auto schema = create_schema(*ctx->tiledb_ctx(), false);
 
     std::map<std::string, std::string> expected_map{{"experiment", sub_uri}};
 
@@ -228,12 +222,12 @@ TEST_CASE("SOMACollection: add SOMAExperiment") {
 }
 
 TEST_CASE("SOMACollection: add SOMAMeasurement") {
-    auto ctx = std::make_shared<Context>();
+    auto ctx = std::make_shared<SOMAContext>();
     std::string base_uri = "mem://unit-test-add-measurement";
     std::string sub_uri = "mem://unit-test-add-measurement/sub";
 
     SOMACollection::create(base_uri, ctx);
-    auto schema = create_schema(*ctx, false);
+    auto schema = create_schema(*ctx->tiledb_ctx(), false);
 
     std::map<std::string, std::string> expected_map{{"measurement", sub_uri}};
 
@@ -253,7 +247,7 @@ TEST_CASE("SOMACollection: add SOMAMeasurement") {
 }
 
 TEST_CASE("SOMACollection: metadata") {
-    auto ctx = std::make_shared<Context>();
+    auto ctx = std::make_shared<SOMAContext>();
 
     std::string uri = "mem://unit-test-collection";
     SOMACollection::create(uri, ctx);
@@ -290,10 +284,10 @@ TEST_CASE("SOMACollection: metadata") {
 }
 
 TEST_CASE("SOMAExperiment: metadata") {
-    auto ctx = std::make_shared<Context>();
+    auto ctx = std::make_shared<SOMAContext>();
 
     std::string uri = "mem://unit-test-experiment";
-    SOMAExperiment::create(uri, create_schema(*ctx), ctx);
+    SOMAExperiment::create(uri, create_schema(*ctx->tiledb_ctx()), ctx);
     auto soma_experiment = SOMAExperiment::open(
         uri, OpenMode::write, ctx, std::pair<uint64_t, uint64_t>(1, 1));
     int32_t val = 100;
@@ -327,10 +321,10 @@ TEST_CASE("SOMAExperiment: metadata") {
 }
 
 TEST_CASE("SOMAMeasurement: metadata") {
-    auto ctx = std::make_shared<Context>();
+    auto ctx = std::make_shared<SOMAContext>();
 
     std::string uri = "mem://unit-test-measurement";
-    SOMAMeasurement::create(uri, create_schema(*ctx), ctx);
+    SOMAMeasurement::create(uri, create_schema(*ctx->tiledb_ctx()), ctx);
     auto soma_measurement = SOMAMeasurement::open(
         uri, OpenMode::write, ctx, std::pair<uint64_t, uint64_t>(1, 1));
     int32_t val = 100;

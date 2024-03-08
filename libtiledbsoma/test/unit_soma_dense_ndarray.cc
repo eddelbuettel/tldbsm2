@@ -77,17 +77,17 @@ ArraySchema create_schema(Context& ctx, bool allow_duplicates = false) {
 };  // namespace
 
 TEST_CASE("SOMADenseNDArray: basic") {
-    auto ctx = std::make_shared<Context>();
+    auto ctx = std::make_shared<SOMAContext>();
     std::string uri = "mem://unit-test-dense-ndarray-basic";
 
-    SOMADenseNDArray::create(uri, create_schema(*ctx), ctx);
+    SOMADenseNDArray::create(uri, create_schema(*ctx->tiledb_ctx()), ctx);
 
     auto soma_dense = SOMADenseNDArray::open(uri, OpenMode::read, ctx);
     REQUIRE(soma_dense->uri() == uri);
     REQUIRE(soma_dense->ctx() == ctx);
     REQUIRE(soma_dense->type() == "SOMADenseNDArray");
     REQUIRE(soma_dense->is_sparse() == false);
-    auto schema = soma_dense->schema();
+    auto schema = soma_dense->tiledb_schema();
     REQUIRE(schema->has_attribute("a0"));
     REQUIRE(schema->domain().has_dimension("d0"));
     REQUIRE(soma_dense->ndim() == 1);
@@ -98,7 +98,8 @@ TEST_CASE("SOMADenseNDArray: basic") {
     std::vector<int> a0(10, 1);
 
     auto array_buffer = std::make_shared<ArrayBuffers>();
-    auto tdb_arr = std::make_shared<Array>(*ctx, uri, TILEDB_READ);
+    auto tdb_arr = std::make_shared<Array>(
+        *ctx->tiledb_ctx(), uri, TILEDB_READ);
     array_buffer->emplace("a0", ColumnBuffer::create(tdb_arr, "a0", a0));
     array_buffer->emplace("d0", ColumnBuffer::create(tdb_arr, "d0", d0));
 
@@ -120,10 +121,10 @@ TEST_CASE("SOMADenseNDArray: basic") {
 }
 
 TEST_CASE("SOMADenseNDArray: metadata") {
-    auto ctx = std::make_shared<Context>();
+    auto ctx = std::make_shared<SOMAContext>();
 
     std::string uri = "mem://unit-test-dense-ndarray";
-    SOMADenseNDArray::create(uri, create_schema(*ctx), ctx);
+    SOMADenseNDArray::create(uri, create_schema(*ctx->tiledb_ctx()), ctx);
     auto soma_dense = SOMADenseNDArray::open(
         uri,
         OpenMode::write,

@@ -6,6 +6,12 @@
 get_filename_component(TILEDBSOMA_SOURCE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../" ABSOLUTE)
 add_compile_definitions(TILEDBSOMA_SOURCE_ROOT="${TILEDBSOMA_SOURCE_ROOT}")
 
+# ###########################################################
+# Adding coverage flags
+# ###########################################################
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} $ENV{TILEDBSOMA_COVERAGE}")
+set(CMAKE_C_FLAGS "${CMAKE_CXX_FLAGS} $ENV{TILEDBSOMA_COVERAGE}")
+
 ############################################################
 # Dependencies
 ############################################################
@@ -29,6 +35,7 @@ add_executable(unit_soma
     unit_soma_dense_ndarray.cc
     unit_soma_sparse_ndarray.cc
     unit_soma_collection.cc
+    test_indexer.cc
 # TODO: uncomment when thread_pool is enabled
 #    unit_thread_pool.cc
 )
@@ -44,13 +51,16 @@ target_include_directories(unit_soma
     ${CMAKE_CURRENT_SOURCE_DIR}/../src
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/external/include
     ${pybind11_INCLUDE_DIRS}
+    ${TILEDB_SOMA_EXPORT_HEADER_DIR}
     $<TARGET_PROPERTY:spdlog::spdlog,INTERFACE_INCLUDE_DIRECTORIES>
 )
 
 target_compile_definitions(unit_soma PRIVATE CATCH_CONFIG_MAIN)
 
-# Allow deprecated function for writing to an array with a timestamp
-target_compile_options(unit_soma PRIVATE -Wno-deprecated-declarations)
+if (NOT MSVC)
+  # Allow deprecated function for writing to an array with a timestamp
+  target_compile_options(unit_soma PRIVATE -Wno-deprecated-declarations)
+endif()
 
 if (NOT APPLE AND NOT WIN32)
     target_link_libraries(unit_soma PRIVATE pthread)
@@ -61,6 +71,13 @@ add_test(
     COMMAND $<TARGET_FILE:unit_soma> "--durations=yes"
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
+
+if (WIN32)
+  add_custom_command(TARGET unit_soma POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_RUNTIME_DLLS:unit_soma> $<TARGET_FILE_DIR:unit_soma>
+    COMMAND_EXPAND_LISTS
+  )
+endif()
 
 add_custom_target(build_tests)
 add_dependencies(build_tests
@@ -73,7 +90,7 @@ add_dependencies(build_tests
 
 # Add custom target 'check' in the root of the tree
 add_custom_target(
-  check COMMAND ${CMAKE_CTEST_COMMAND} -V -C ${CMAKE_BUILD_TYPE}
+  check COMMAND ${CMAKE_CTEST_COMMAND} -V -C $<CONFIG>
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/../
   DEPENDS
     build_tests

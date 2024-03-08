@@ -59,36 +59,28 @@ const std::string src_path = TILEDBSOMA_SOURCE_ROOT;
 namespace {
 
 std::tuple<std::string, uint64_t> create_array(
-    const std::string& uri_in,
-    std::shared_ptr<Context> ctx,
+    const std::string& uri,
+    std::shared_ptr<SOMAContext> ctx,
     int num_cells_per_fragment = 10,
     int num_fragments = 1,
     bool overlap = false,
     bool allow_duplicates = false) {
-    std::string uri = fmt::format(
-        "{}-{}-{}-{}-{}",
-        uri_in,
-        num_cells_per_fragment,
-        num_fragments,
-        overlap,
-        allow_duplicates);
-
-    auto vfs = VFS(*ctx);
+    auto vfs = VFS(*ctx->tiledb_ctx());
     if (vfs.is_dir(uri)) {
         vfs.remove_dir(uri);
     }
 
     // Create schema
-    ArraySchema schema(*ctx, TILEDB_SPARSE);
+    ArraySchema schema(*ctx->tiledb_ctx(), TILEDB_SPARSE);
 
     auto dim = Dimension::create<int64_t>(
-        *ctx, "d0", {0, std::numeric_limits<int64_t>::max() - 1});
+        *ctx->tiledb_ctx(), "d0", {0, std::numeric_limits<int64_t>::max() - 1});
 
-    Domain domain(*ctx);
+    Domain domain(*ctx->tiledb_ctx());
     domain.add_dimension(dim);
     schema.set_domain(domain);
 
-    auto attr = Attribute::create<int>(*ctx, "a0");
+    auto attr = Attribute::create<int>(*ctx->tiledb_ctx(), "a0");
     schema.add_attribute(attr);
     schema.set_allows_dups(allow_duplicates);
     schema.check();
@@ -112,7 +104,7 @@ std::tuple<std::string, uint64_t> create_array(
 
 std::tuple<std::vector<int64_t>, std::vector<int>> write_array(
     const std::string& uri,
-    std::shared_ptr<Context> ctx,
+    std::shared_ptr<SOMAContext> ctx,
     int num_cells_per_fragment = 10,
     int num_fragments = 1,
     bool overlap = false,
@@ -127,17 +119,13 @@ std::tuple<std::vector<int64_t>, std::vector<int>> write_array(
         auto frag_num = frags[i];
         auto soma_array = SOMAArray::open(
             OpenMode::write,
-            ctx,
             uri,
+            ctx,
             "",
             {},
             "auto",
             ResultOrder::automatic,
             std::pair<uint64_t, uint64_t>(timestamp + i, timestamp + i));
-
-        if (LOG_DEBUG_ENABLED()) {
-            soma_array->schema()->dump();
-        }
 
         std::vector<int64_t> d0(num_cells_per_fragment);
         for (int j = 0; j < num_cells_per_fragment; j++) {
@@ -151,7 +139,8 @@ std::tuple<std::vector<int64_t>, std::vector<int>> write_array(
         std::vector<int> a0(num_cells_per_fragment, frag_num);
 
         auto array_buffer = std::make_shared<ArrayBuffers>();
-        auto tdb_arr = std::make_shared<Array>(*ctx, uri, TILEDB_READ);
+        auto tdb_arr = std::make_shared<Array>(
+            *ctx->tiledb_ctx(), uri, TILEDB_READ);
         array_buffer->emplace("a0", ColumnBuffer::create(tdb_arr, "a0", a0));
         array_buffer->emplace("d0", ColumnBuffer::create(tdb_arr, "d0", d0));
 
@@ -161,13 +150,14 @@ std::tuple<std::vector<int64_t>, std::vector<int>> write_array(
     }
 
     // Read from TileDB Array to get expected data
-    Array tiledb_array(*ctx, uri, TILEDB_READ, timestamp + num_fragments - 1);
+    Array tiledb_array(
+        *ctx->tiledb_ctx(), uri, TILEDB_READ, timestamp + num_fragments - 1);
     tiledb_array.reopen();
 
     std::vector<int64_t> expected_d0(num_cells_per_fragment * num_fragments);
     std::vector<int> expected_a0(num_cells_per_fragment * num_fragments);
 
-    Query query(*ctx, tiledb_array);
+    Query query(*ctx->tiledb_ctx(), tiledb_array);
     query.set_layout(TILEDB_UNORDERED)
         .set_data_buffer("d0", expected_d0)
         .set_data_buffer("a0", expected_a0);
@@ -190,12 +180,15 @@ TEST_CASE("SOMAArray: nnz") {
     int num_cells_per_fragment = 128;
     auto timestamp = 10;
 
-    SECTION(fmt::format(
-        " - fragments={}, overlap={}, allow_duplicates={}",
-        num_fragments,
-        overlap,
-        allow_duplicates)) {
-        auto ctx = std::make_shared<Context>();
+    // TODO this use to be formatted with fmt::format which is part of internal
+    // header spd/log/fmt/fmt.h and should not be used. In C++20, this can be
+    // replaced with std::format.
+    std::ostringstream section;
+    section << "- fragments=" << num_fragments << ", overlap" << overlap
+            << ", allow_duplicates=" << allow_duplicates;
+
+    SECTION(section.str()) {
+        auto ctx = std::make_shared<SOMAContext>();
 
         // Create array
         std::string base_uri = "mem://unit-test-array";
@@ -219,8 +212,8 @@ TEST_CASE("SOMAArray: nnz") {
         // Get total cell num
         auto soma_array = SOMAArray::open(
             OpenMode::read,
-            ctx,
             uri,
+            ctx,
             "",
             {},
             "auto",
@@ -260,12 +253,15 @@ TEST_CASE("SOMAArray: nnz with timestamp") {
     auto allow_duplicates = true;
     int num_cells_per_fragment = 128;
 
-    SECTION(fmt::format(
-        " - fragments={}, overlap={}, allow_duplicates={}",
-        num_fragments,
-        overlap,
-        allow_duplicates)) {
-        auto ctx = std::make_shared<Context>();
+    // TODO this use to be formatted with fmt::format which is part of internal
+    // header spd/log/fmt/fmt.h and should not be used. In C++20, this can be
+    // replaced with std::format.
+    std::ostringstream section;
+    section << "- fragments=" << num_fragments << ", overlap" << overlap
+            << ", allow_duplicates=" << allow_duplicates;
+
+    SECTION(section.str()) {
+        auto ctx = std::make_shared<SOMAContext>();
 
         // Create array
         std::string base_uri = "mem://unit-test-array";
@@ -290,8 +286,8 @@ TEST_CASE("SOMAArray: nnz with timestamp") {
         std::pair<uint64_t, uint64_t> timestamp{0, 20};
         auto soma_array = SOMAArray::open(
             OpenMode::read,
-            ctx,
             uri,
+            ctx,
             "nnz",
             {},
             "auto",
@@ -310,13 +306,15 @@ TEST_CASE("SOMAArray: nnz with consolidation") {
     auto vacuum = GENERATE(false, true);
     int num_cells_per_fragment = 128;
 
-    SECTION(fmt::format(
-        " - fragments={}, overlap={}, allow_duplicates={}, vacuum={}",
-        num_fragments,
-        overlap,
-        allow_duplicates,
-        vacuum)) {
-        auto ctx = std::make_shared<Context>();
+    // TODO this use to be formatted with fmt::format which is part of internal
+    // header spd/log/fmt/fmt.h and should not be used. In C++20, this can be
+    // replaced with std::format.
+    std::ostringstream section;
+    section << "- fragments=" << num_fragments << ", overlap" << overlap
+            << ", allow_duplicates=" << allow_duplicates;
+
+    SECTION(section.str()) {
+        auto ctx = std::make_shared<SOMAContext>();
 
         // Create array
         std::string base_uri = "mem://unit-test-array";
@@ -339,16 +337,16 @@ TEST_CASE("SOMAArray: nnz with consolidation") {
             uri, ctx, num_cells_per_fragment, num_fragments, overlap, 20);
 
         // Consolidate and optionally vacuum
-        Array::consolidate(*ctx, uri);
+        Array::consolidate(*ctx->tiledb_ctx(), uri);
         if (vacuum) {
-            Array::vacuum(*ctx, uri);
+            Array::vacuum(*ctx->tiledb_ctx(), uri);
         }
 
         // Get total cell num
         auto soma_array = SOMAArray::open(
             OpenMode::read,
-            ctx,
             uri,
+            ctx,
             "nnz",
             {},
             "auto",
@@ -365,15 +363,15 @@ TEST_CASE("SOMAArray: nnz with consolidation") {
 }
 
 TEST_CASE("SOMAArray: metadata") {
-    auto ctx = std::make_shared<Context>();
+    auto ctx = std::make_shared<SOMAContext>();
 
     std::string base_uri = "mem://unit-test-array";
     const auto& [uri, expected_nnz] = create_array(base_uri, ctx);
 
     auto soma_array = SOMAArray::open(
         OpenMode::write,
-        ctx,
         uri,
+        ctx,
         "metadata_test",
         {},
         "auto",
@@ -414,14 +412,14 @@ TEST_CASE("SOMAArray: Test buffer size") {
     // enough to read one byte at a time so that read_next
     // must be called 10 times instead of placing all data
     // in buffer within a single read
-    Config cfg;
-    cfg["soma.init_buffer_bytes"] = 8;
-    auto ctx = std::make_shared<Context>(cfg);
+    std::map<std::string, std::string> cfg;
+    cfg["soma.init_buffer_bytes"] = "8";
+    auto ctx = std::make_shared<SOMAContext>(cfg);
 
     std::string base_uri = "mem://unit-test-array";
     auto [uri, expected_nnz] = create_array(base_uri, ctx);
     auto [expected_d0, expected_a0] = write_array(uri, ctx);
-    auto soma_array = SOMAArray::open(OpenMode::read, ctx, uri);
+    auto soma_array = SOMAArray::open(OpenMode::read, uri, ctx);
 
     size_t loops = 0;
     while (auto batch = soma_array->read_next())
@@ -432,30 +430,47 @@ TEST_CASE("SOMAArray: Test buffer size") {
 
 TEST_CASE("SOMAArray: Enumeration") {
     std::string uri = "mem://unit-test-array-enmr";
-    auto ctx = std::make_shared<Context>();
-    ArraySchema schema(*ctx, TILEDB_SPARSE);
+    auto ctx = std::make_shared<SOMAContext>();
+    ArraySchema schema(*ctx->tiledb_ctx(), TILEDB_SPARSE);
 
     auto dim = Dimension::create<int64_t>(
-        *ctx, "d", {0, std::numeric_limits<int64_t>::max() - 1});
+        *ctx->tiledb_ctx(), "d", {0, std::numeric_limits<int64_t>::max() - 1});
 
-    Domain dom(*ctx);
+    Domain dom(*ctx->tiledb_ctx());
     dom.add_dimension(dim);
     schema.set_domain(dom);
 
     std::vector<std::string> vals = {"red", "blue", "green"};
-    auto enmr = Enumeration::create(*ctx, "rbg", vals);
-    ArraySchemaExperimental::add_enumeration(*ctx, schema, enmr);
+    auto enmr = Enumeration::create(*ctx->tiledb_ctx(), "rbg", vals);
+    ArraySchemaExperimental::add_enumeration(*ctx->tiledb_ctx(), schema, enmr);
 
-    auto attr = Attribute::create<int>(*ctx, "a");
-    AttributeExperimental::set_enumeration_name(*ctx, attr, "rbg");
+    auto attr = Attribute::create<int>(*ctx->tiledb_ctx(), "a");
+    AttributeExperimental::set_enumeration_name(
+        *ctx->tiledb_ctx(), attr, "rbg");
     schema.add_attribute(attr);
 
     Array::create(uri, schema);
 
-    auto soma_array = SOMAArray::open(OpenMode::read, ctx, uri);
+    auto soma_array = SOMAArray::open(OpenMode::read, uri, ctx);
     auto attr_to_enum = soma_array->get_attr_to_enum_mapping();
     REQUIRE(attr_to_enum.size() == 1);
     REQUIRE(attr_to_enum.at("a").name() == "rbg");
     REQUIRE(soma_array->get_enum_label_on_attr("a"));
     REQUIRE(soma_array->attr_has_enum("a"));
+}
+
+TEST_CASE("SOMAArray: ResultOrder") {
+    auto ctx = std::make_shared<SOMAContext>();
+    std::string base_uri = "mem://unit-test-array-result-order";
+    auto [uri, expected_nnz] = create_array(base_uri, ctx);
+    auto [expected_d0, expected_a0] = write_array(uri, ctx);
+    auto soma_array = SOMAArray::open(OpenMode::read, uri, ctx);
+    REQUIRE(soma_array->result_order() == ResultOrder::automatic);
+    soma_array->reset({}, "auto", ResultOrder::rowmajor);
+    REQUIRE(soma_array->result_order() == ResultOrder::rowmajor);
+    soma_array->reset({}, "auto", ResultOrder::colmajor);
+    REQUIRE(soma_array->result_order() == ResultOrder::colmajor);
+    REQUIRE_THROWS_AS(
+        soma_array->reset({}, "auto", static_cast<ResultOrder>(3)),
+        std::invalid_argument);
 }
