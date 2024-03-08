@@ -57,26 +57,41 @@ void ArrowAdapter::release_schema(struct ArrowSchema* schema) {
         schema->metadata = nullptr;
     }
 
-    for (int i = 0; i < schema->n_children; ++i) {
-        struct ArrowSchema* child = schema->children[i];
-        if (child->name != nullptr) {
-            LOG_TRACE("[ArrowAdapter] release_schema schema->child->name");
-            free((void*)child->name);
-            child->name = nullptr;
-        }
-        if (child->format != nullptr) {
-            LOG_TRACE("[ArrowAdapter] release_schema schema->child->format");
-            free((void*)child->format);
-            child->format = nullptr;
-        }
-        if (child->release != NULL) {
-            child->release(child);
-        }
-        LOG_TRACE("[ArrowAdapter] release_schema schema->child");
-        free(child);
+    // for (int i = 0; i < schema->n_children; ++i) {
+    //     struct ArrowSchema* child = schema->children[i];
+    //     if (child->name != nullptr) {
+    //         LOG_TRACE("[ArrowAdapter] release_schema schema->child->name");
+    //         free((void*)child->name);
+    //         child->name = nullptr;
+    //     }
+    //     if (child->format != nullptr) {
+    //         LOG_TRACE("[ArrowAdapter] release_schema schema->child->format");
+    //         free((void*)child->format);
+    //         child->format = nullptr;
+    //     }
+    //     if (child->release != NULL) {
+    //         child->release(child);
+    //     }
+    //     LOG_TRACE("[ArrowAdapter] release_schema schema->child");
+    //     free(child);
 
+    //     free(schema->children);
+    // }
+    if (schema->children != NULL) {
+        for (auto i = 0; i < schema->n_children; i++) {
+            if (schema->children[i] != NULL) {
+                if (schema->children[i]->release != NULL) {
+                    LOG_TRACE(fmt::format("[ArrowAdapter] release_schema schema->child {} release",i));
+                    release_schema(schema->children[i]);
+                }
+                LOG_TRACE(fmt::format("[ArrowAdapter] release_schema schema->child {} free",i));
+                free(schema->children[i]);
+            }
+        }
+        LOG_TRACE("[ArrowAdapter] release_schema schema->children");
         free(schema->children);
     }
+
 
     struct ArrowSchema* dict = schema->dictionary;
     if (dict != nullptr) {
