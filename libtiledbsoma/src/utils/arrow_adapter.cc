@@ -136,10 +136,10 @@ void ArrowAdapter::release_array(struct ArrowArray* array) {
     // }
 
     if (array->dictionary != nullptr) {
-        if (array->dictionary->release != nullptr) {
-            LOG_TRACE("[ArrowAdapter] release_array array->dict release");
-            release_array(array->dictionary);
-        }
+        //if (array->dictionary->release != nullptr) {
+        //    LOG_TRACE("[ArrowAdapter] release_array array->dict release");
+        //    release_array(array->dictionary);
+        //}
         LOG_TRACE("[ArrowAdapter] release_array array->dict free");
         free(array->dictionary);
         array->dictionary = nullptr;

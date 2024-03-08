@@ -78,7 +78,10 @@ Bootstrap() {
     # Make sure unit test package (among testthat, tinytest, RUnit) installed
     EnsureUnittestRunner
 
-    # Report version
+    # See help(download.file)
+    echo 'options(timeout = max(300, getOption("timeout")))' >> ~/.Rprofile
+
+    # report version
     Rscript -e 'sessionInfo()'
 }
 
