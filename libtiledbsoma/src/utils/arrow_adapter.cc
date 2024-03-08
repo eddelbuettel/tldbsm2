@@ -57,30 +57,10 @@ void ArrowAdapter::release_schema(struct ArrowSchema* schema) {
         schema->metadata = nullptr;
     }
 
-    // for (int i = 0; i < schema->n_children; ++i) {
-    //     struct ArrowSchema* child = schema->children[i];
-    //     if (child->name != nullptr) {
-    //         LOG_TRACE("[ArrowAdapter] release_schema schema->child->name");
-    //         free((void*)child->name);
-    //         child->name = nullptr;
-    //     }
-    //     if (child->format != nullptr) {
-    //         LOG_TRACE("[ArrowAdapter] release_schema schema->child->format");
-    //         free((void*)child->format);
-    //         child->format = nullptr;
-    //     }
-    //     if (child->release != NULL) {
-    //         child->release(child);
-    //     }
-    //     LOG_TRACE("[ArrowAdapter] release_schema schema->child");
-    //     free(child);
-
-    //     free(schema->children);
-    // }
-    if (schema->children != NULL) {
+    if (schema->children != nullptr) {
         for (auto i = 0; i < schema->n_children; i++) {
-            if (schema->children[i] != NULL) {
-                if (schema->children[i]->release != NULL) {
+            if (schema->children[i] != nullptr) {
+                if (schema->children[i]->release != nullptr) {
                     LOG_TRACE(fmt::format("[ArrowAdapter] release_schema schema->child {} release",i));
                     release_schema(schema->children[i]);
                 }
@@ -90,26 +70,34 @@ void ArrowAdapter::release_schema(struct ArrowSchema* schema) {
         }
         LOG_TRACE("[ArrowAdapter] release_schema schema->children");
         free(schema->children);
+        schema->children = nullptr;
     }
 
-
-    struct ArrowSchema* dict = schema->dictionary;
-    if (dict != nullptr) {
-        if (dict->name != nullptr) {
-            LOG_TRACE("[ArrowAdapter] release_schema schema->dict->name");
-            free((void*)dict->name);
-            dict->name = nullptr;
+    // struct ArrowSchema* dict = schema->dictionary;
+    // if (dict != nullptr) {
+    //     if (dict->name != nullptr) {
+    //         LOG_TRACE("[ArrowAdapter] release_schema schema->dict->name");
+    //         free((void*)dict->name);
+    //         dict->name = nullptr;
+    //     }
+    //     if (dict->format != nullptr) {
+    //         LOG_TRACE("[ArrowAdapter] release_schema schema->dict->format");
+    //         free((void*)dict->format);
+    //         dict->format = nullptr;
+    //     }
+    //     if (dict->release != nullptr) {
+    //         LOG_TRACE("[ArrowAdapter] release_schema schema->dict");
+    //         free(dict);
+    //         dict = nullptr;
+    //     }
+    // }
+    if (schema->dictionary != NULL) {
+        if (schema->dictionary->release != NULL) {
+            LOG_TRACE("[ArrowAdapter] release_schema schema->dict release");
+            release_schema(schema->dictionary);
         }
-        if (dict->format != nullptr) {
-            LOG_TRACE("[ArrowAdapter] release_schema schema->dict->format");
-            free((void*)dict->format);
-            dict->format = nullptr;
-        }
-        if (dict->release != nullptr) {
-            LOG_TRACE("[ArrowAdapter] release_schema schema->dict");
-            free(dict);
-            dict = nullptr;
-        }
+        LOG_TRACE("[ArrowAdapter] release_schema schema->dict free");
+        free(schema->dictionary);
     }
 
     schema->release = nullptr;
