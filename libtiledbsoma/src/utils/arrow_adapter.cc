@@ -40,7 +40,6 @@ using namespace tiledb;
 
 void ArrowAdapter::release_schema(struct ArrowSchema* schema) {
     LOG_DEBUG(fmt::format("[ArrowAdapter] release_schema for {}", schema->name));
-    schema->release = nullptr;
 
     if (schema->name != nullptr) {
         LOG_TRACE("[ArrowAdapter] release_schema schema->name");
@@ -52,6 +51,12 @@ void ArrowAdapter::release_schema(struct ArrowSchema* schema) {
         free((void*)schema->format);
         schema->format = nullptr;
     }
+    if (schema->metadata != nullptr) {
+        LOG_TRACE("[ArrowAdapter] release_schema schema->metadata");
+        free((void*)schema->metadata);
+        schema->metadata = nullptr;
+    }
+
     for (int i = 0; i < schema->n_children; ++i) {
         struct ArrowSchema* child = schema->children[i];
         if (child->name != nullptr) {
@@ -91,6 +96,8 @@ void ArrowAdapter::release_schema(struct ArrowSchema* schema) {
             dict = nullptr;
         }
     }
+
+    schema->release = nullptr;
     LOG_TRACE("[ArrowAdapter] release_schema done");
 }
 
