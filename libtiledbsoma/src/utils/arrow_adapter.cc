@@ -73,31 +73,14 @@ void ArrowAdapter::release_schema(struct ArrowSchema* schema) {
         schema->children = nullptr;
     }
 
-    // struct ArrowSchema* dict = schema->dictionary;
-    // if (dict != nullptr) {
-    //     if (dict->name != nullptr) {
-    //         LOG_TRACE("[ArrowAdapter] release_schema schema->dict->name");
-    //         free((void*)dict->name);
-    //         dict->name = nullptr;
-    //     }
-    //     if (dict->format != nullptr) {
-    //         LOG_TRACE("[ArrowAdapter] release_schema schema->dict->format");
-    //         free((void*)dict->format);
-    //         dict->format = nullptr;
-    //     }
-    //     if (dict->release != nullptr) {
-    //         LOG_TRACE("[ArrowAdapter] release_schema schema->dict");
-    //         free(dict);
-    //         dict = nullptr;
-    //     }
-    // }
-    if (schema->dictionary != NULL) {
-        if (schema->dictionary->release != NULL) {
+    if (schema->dictionary != nullptr) {
+        if (schema->dictionary->release != nullptr) {
             LOG_TRACE("[ArrowAdapter] release_schema schema->dict release");
             release_schema(schema->dictionary);
         }
         LOG_TRACE("[ArrowAdapter] release_schema schema->dict free");
         free(schema->dictionary);
+        schema->dictionary = nullptr;
     }
 
     schema->release = nullptr;
@@ -106,7 +89,6 @@ void ArrowAdapter::release_schema(struct ArrowSchema* schema) {
 
 void ArrowAdapter::release_array(struct ArrowArray* array) {
     auto arrow_buffer = static_cast<ArrowBuffer*>(array->private_data);
-
     LOG_TRACE(fmt::format(
         "[ArrowAdapter] release_array {} use_count={}",
         arrow_buffer->buffer_->name(),
@@ -123,14 +105,29 @@ void ArrowAdapter::release_array(struct ArrowArray* array) {
         array->buffers = nullptr;
     }
 
-    if (array->n_children > 0) {
-        for (int i = 0; i < array->n_children; ++i) {
-            struct ArrowArray* child = array->children[i];
-            if (child != nullptr) {
-                release_array(child);
-                LOG_TRACE("[ArrowAdapter] release_array array->child");
-                free(child);
-                child = nullptr;
+    // if (array->n_children > 0) {
+    //     for (int i = 0; i < array->n_children; ++i) {
+    //         struct ArrowArray* child = array->children[i];
+    //         if (child != nullptr) {
+    //             release_array(child);
+    //             LOG_TRACE("[ArrowAdapter] release_array array->child");
+    //             free(child);
+    //             child = nullptr;
+    //         }
+    //     }
+    //     LOG_TRACE("[ArrowAdapter] release_array array->children");
+    //     free(array->children);
+    //     array->children = nullptr;
+    // }
+    if (array->children != nullptr) {
+        for (auto i = 0; i < array->n_children; i++) {
+            if (array->children[i] != nullptr) {
+                if (array->children[i]->release != nullptr) {
+                    LOG_TRACE(fmt::format("[ArrowAdapter] release_schema array->child {} release",i));
+                    release_array(array->children[i]);
+                }
+                LOG_TRACE(fmt::format("[ArrowAdapter] release_schema array->child {} free",i));
+                free(array->children[i]);
             }
         }
         LOG_TRACE("[ArrowAdapter] release_array array->children");
