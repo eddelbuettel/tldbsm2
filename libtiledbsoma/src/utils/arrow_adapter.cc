@@ -121,21 +121,9 @@ void ArrowAdapter::release_array(struct ArrowArray* array) {
         array->children = nullptr;
     }
 
-    // struct ArrowArray* dict = array->dictionary;
-    // if (dict != nullptr) {
-    //     if (dict->buffers != nullptr) {
-    //         LOG_TRACE("[ArrowAdapter] release_array array->dict->buffers");
-    //         //free(dict->buffers);
-    //         dict->buffers = nullptr;
-    //     }
-    //     if (dict->release != nullptr) {
-    //         LOG_TRACE("[ArrowAdapter] release_array array->dict");
-    //         free(dict);
-    //         dict = nullptr;
-    //     }
-    // }
-
     if (array->dictionary != nullptr) {
+        // -- TODO: This can lead to segfault on some data sets and could be cause
+        //          by how we fill arrow data structures.  This should pass.
         //if (array->dictionary->release != nullptr) {
         //    LOG_TRACE("[ArrowAdapter] release_array array->dict release");
         //    release_array(array->dictionary);
