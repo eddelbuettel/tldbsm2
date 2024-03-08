@@ -105,20 +105,6 @@ void ArrowAdapter::release_array(struct ArrowArray* array) {
         array->buffers = nullptr;
     }
 
-    // if (array->n_children > 0) {
-    //     for (int i = 0; i < array->n_children; ++i) {
-    //         struct ArrowArray* child = array->children[i];
-    //         if (child != nullptr) {
-    //             release_array(child);
-    //             LOG_TRACE("[ArrowAdapter] release_array array->child");
-    //             free(child);
-    //             child = nullptr;
-    //         }
-    //     }
-    //     LOG_TRACE("[ArrowAdapter] release_array array->children");
-    //     free(array->children);
-    //     array->children = nullptr;
-    // }
     if (array->children != nullptr) {
         for (auto i = 0; i < array->n_children; i++) {
             if (array->children[i] != nullptr) {
@@ -135,19 +121,30 @@ void ArrowAdapter::release_array(struct ArrowArray* array) {
         array->children = nullptr;
     }
 
-    struct ArrowArray* dict = array->dictionary;
-    if (dict != nullptr) {
-        if (dict->buffers != nullptr) {
-            LOG_TRACE("[ArrowAdapter] release_array array->dict->buffers");
-            //free(dict->buffers);
-            dict->buffers = nullptr;
+    // struct ArrowArray* dict = array->dictionary;
+    // if (dict != nullptr) {
+    //     if (dict->buffers != nullptr) {
+    //         LOG_TRACE("[ArrowAdapter] release_array array->dict->buffers");
+    //         //free(dict->buffers);
+    //         dict->buffers = nullptr;
+    //     }
+    //     if (dict->release != nullptr) {
+    //         LOG_TRACE("[ArrowAdapter] release_array array->dict");
+    //         free(dict);
+    //         dict = nullptr;
+    //     }
+    // }
+
+    if (array->dictionary != nullptr) {
+        if (array->dictionary->release != nullptr) {
+            LOG_TRACE("[ArrowAdapter] release_array array->dict release");
+            release_array(array->dictionary);
         }
-        if (dict->release != nullptr) {
-            LOG_TRACE("[ArrowAdapter] release_array array->dict");
-            free(dict);
-            dict = nullptr;
-        }
+        LOG_TRACE("[ArrowAdapter] release_array array->dict free");
+        free(array->dictionary);
+        array->dictionary = nullptr;
     }
+
     array->release = nullptr;
     LOG_TRACE(fmt::format("[ArrowAdapter] release_array done"));
 }
