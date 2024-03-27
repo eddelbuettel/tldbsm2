@@ -1,5 +1,5 @@
 library(testthat)
 library(tiledbsoma)
-
+set_log_level("debug")
 tiledbsoma::show_package_versions()
 test_check("tiledbsoma", reporter=default_reporter())
