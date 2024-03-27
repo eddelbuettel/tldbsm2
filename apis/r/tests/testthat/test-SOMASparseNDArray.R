@@ -574,5 +574,5 @@ test_that("Bounding box assertions", {
   expect_error(ndarray$write(mat, bbox = c(nrows, ncols) / 2L))
   expect_error(ndarray$write(mat, bbox = list(c(20L, nrows), c(20L, ncols))))
   expect_error(ndarray$write(mat, bbox = list(c(-20L, nrows), c(-20L, ncols))))
-  set_log_leve("warn")
+  set_log_level("warn")
 })
