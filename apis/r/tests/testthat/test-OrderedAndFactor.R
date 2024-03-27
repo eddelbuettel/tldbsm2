@@ -2,7 +2,6 @@ test_that("SOMADataFrame round-trip with factor and ordered", {
     skip_if(!extended_tests())
 
     uri <- tempfile()
-    set_log_level("debug")
 
     ## borrowed from tiledb-r test file test_ordered.R
     ## A data.frame with an ordered column, taken from package `earth` and its `etitanic` cleaned
@@ -80,9 +79,7 @@ test_that("SOMADataFrame round-trip with factor and ordered", {
     ## quick write with tiledb-r so that we get a schema from the manifested array
     ## there should possibly be a helper function to create the schema from a data.frame
     turi <- tempfile()
-                                        #expect_silent(
-    tiledb::fromDataFrame(ett, turi, col_index="soma_joinid")
-    #)
+    expect_silent(tiledb::fromDataFrame(ett, turi, col_index="soma_joinid"))
 
     tsch <- tiledb::schema(turi)
     expect_true(inherits(tsch, "tiledb_array_schema"))
@@ -98,6 +95,7 @@ test_that("SOMADataFrame round-trip with factor and ordered", {
     expect_equal(length(lvls), ncol(et))  # et, not ett or tsch or sch as no soma_joinid
     expect_equal(names(lvls), colnames(et))
 
+    set_log_level("debug")
     sdf <- SOMADataFrameCreate(uri, sch)
     expect_true(inherits(sdf, "SOMADataFrame"))
 
