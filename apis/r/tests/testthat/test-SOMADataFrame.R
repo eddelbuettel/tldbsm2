@@ -113,7 +113,7 @@ test_that("Basic mechanics", {
 })
 
 test_that("Basic mechanics with default index_column_names", {
-  skip_if(!extended_tests())
+  skip_if(!extended_tests()|| covr_tests())
   uri <- withr::local_tempdir("soma-dataframe-soma-joinid")
   asch <- create_arrow_schema(foo_first=FALSE)
 
