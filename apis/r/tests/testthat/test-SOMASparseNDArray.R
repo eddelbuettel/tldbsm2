@@ -1,5 +1,4 @@
 test_that("SOMASparseNDArray creation", {
-  set_log_level("debug")
   skip_if(!extended_tests())
   uri <- withr::local_tempdir("sparse-ndarray")
   ndarray <- SOMASparseNDArrayCreate(uri, arrow::int32(), shape = c(10, 10))
@@ -574,5 +573,4 @@ test_that("Bounding box assertions", {
   expect_error(ndarray$write(mat, bbox = c(nrows, ncols) / 2L))
   expect_error(ndarray$write(mat, bbox = list(c(20L, nrows), c(20L, ncols))))
   expect_error(ndarray$write(mat, bbox = list(c(-20L, nrows), c(-20L, ncols))))
-  set_log_level("warn")
 })
