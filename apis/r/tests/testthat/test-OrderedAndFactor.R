@@ -95,7 +95,6 @@ test_that("SOMADataFrame round-trip with factor and ordered", {
     expect_equal(length(lvls), ncol(et))  # et, not ett or tsch or sch as no soma_joinid
     expect_equal(names(lvls), colnames(et))
 
-    set_log_level("debug")
     sdf <- SOMADataFrameCreate(uri, sch)
     expect_true(inherits(sdf, "SOMADataFrame"))
 
@@ -109,6 +108,5 @@ test_that("SOMADataFrame round-trip with factor and ordered", {
     expect_equivalent(tibble::as_tibble(ndf), tibble::as_tibble(att))
 
     options("arrow.int64_downcast"=op)
-    set_log_level("warn")
 
 })
