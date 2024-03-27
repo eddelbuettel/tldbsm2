@@ -1,5 +1,5 @@
 test_that("Write Assay mechanics", {
-  skip_if(!extended_tests())
+  skip_if(!extended_tests() || covr_tests())
   skip_if_not_installed('SeuratObject', .MINIMUM_SEURAT_VERSION('c'))
 
   uri <- withr::local_tempdir("write-assay")
@@ -113,7 +113,7 @@ test_that("Write Assay mechanics", {
 })
 
 test_that("Write DimReduc mechanics", {
-  skip_if(!extended_tests())
+  skip_if(!extended_tests() || covr_tests())
   skip_if_not_installed('SeuratObject', .MINIMUM_SEURAT_VERSION('c'))
 
   uri <- withr::local_tempdir("write-reduction")
@@ -173,7 +173,7 @@ test_that("Write DimReduc mechanics", {
 })
 
 test_that("Write Graph mechanics", {
-  skip_if(!extended_tests())
+  skip_if(!extended_tests() || covr_tests())
   skip_if_not_installed('SeuratObject', .MINIMUM_SEURAT_VERSION('c'))
 
   uri <- withr::local_tempdir("write-graph")
@@ -197,7 +197,7 @@ test_that("Write Graph mechanics", {
 })
 
 test_that("Write SeuratCommand mechanics", {
-  skip_if(!extended_tests())
+  skip_if(!extended_tests() || covr_tests())
   skip_if_not_installed('SeuratObject', .MINIMUM_SEURAT_VERSION('c'))
   skip_if_not_installed('jsonlite')
 
@@ -273,7 +273,7 @@ test_that("Write SeuratCommand mechanics", {
 })
 
 test_that("Write Seurat mechanics", {
-  skip_if(!extended_tests())
+  skip_if(!extended_tests() || covr_tests())
   skip_if_not_installed('SeuratObject', .MINIMUM_SEURAT_VERSION('c'))
 
   pbmc_small <- get_data('pbmc_small', package = 'SeuratObject')
