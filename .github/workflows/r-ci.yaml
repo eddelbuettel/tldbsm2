@@ -117,3 +117,7 @@ jobs:
         run: apis/r/tools/r-ci.sh dump_logs
         if: failure()
 
+      - name: View Logs by hand
+        run: test -f /Users/runner/work/tldbsm2/tldbsm2/apis/r/tiledbsoma.Rcheck/00check.log && cat /Users/runner/work/tldbsm2/tldbsm2/apis/r/tiledbsoma.Rcheck/00check.log
+        if: failure()
+        
