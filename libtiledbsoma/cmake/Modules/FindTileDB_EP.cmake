@@ -58,8 +58,8 @@ else()
     # NB When updating the pinned URLs here, please also update in file apis/r/tools/get_tarball.R
     if(DOWNLOAD_TILEDB_PREBUILT)
         if (WIN32) # Windows
-          SET(DOWNLOAD_URL "https://github.com/TileDB-Inc/TileDB/releases/download/2.20.1/tiledb-windows-x86_64-2.20.1-249c024.zip")
-          SET(DOWNLOAD_SHA1 "988fdb6f9cf26ae4b9c06951dda6abfb288f51d8")
+          SET(DOWNLOAD_URL "https://github.com/TileDB-Inc/TileDB/releases/download/2.21.1/tiledb-windows-x86_64-2.21.1-acd5c50.zip")
+          SET(DOWNLOAD_SHA1 "6c5e55410d6325e6826f12d8a5aec4ad0aab2f41")
         elseif(APPLE) # OSX
 
           # Status quo as of 2023-05-18:
@@ -76,22 +76,22 @@ else()
           #   o CMAKE_SYSTEM_PROCESSOR is x86_64
 
           if (CMAKE_OSX_ARCHITECTURES STREQUAL x86_64)
-            SET(DOWNLOAD_URL "https://github.com/TileDB-Inc/TileDB/releases/download/2.20.1/tiledb-macos-x86_64-2.20.1-249c024.tar.gz")
-            SET(DOWNLOAD_SHA1 "d347916ae4b6f2c01adddf9f80a5cfbbb47dfb68")
+            SET(DOWNLOAD_URL "https://github.com/TileDB-Inc/TileDB/releases/download/2.21.1/tiledb-macos-x86_64-2.21.1-acd5c50.tar.gz")
+            SET(DOWNLOAD_SHA1 "3c3e362ee46b03e6ed0d9ee840cf371c2d5b0bb8")
           elseif (CMAKE_OSX_ARCHITECTURES STREQUAL arm64)
-            SET(DOWNLOAD_URL "https://github.com/TileDB-Inc/TileDB/releases/download/2.20.1/tiledb-macos-arm64-2.20.1-249c024.tar.gz")
-            SET(DOWNLOAD_SHA1 "d236d781328782d96b95c7cccbd2de07d91ef115")
+            SET(DOWNLOAD_URL "https://github.com/TileDB-Inc/TileDB/releases/download/2.21.1/tiledb-macos-arm64-2.21.1-acd5c50.tar.gz")
+            SET(DOWNLOAD_SHA1 "b00e8fc9c826d7a15c6a732e60937375887b5f25")
           elseif (CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64)|(AMD64|amd64)|(^i.86$)")
-            SET(DOWNLOAD_URL "https://github.com/TileDB-Inc/TileDB/releases/download/2.20.1/tiledb-macos-x86_64-2.20.1-249c024.tar.gz")
-            SET(DOWNLOAD_SHA1 "d347916ae4b6f2c01adddf9f80a5cfbbb47dfb68")
+            SET(DOWNLOAD_URL "https://github.com/TileDB-Inc/TileDB/releases/download/2.21.1/tiledb-macos-x86_64-2.21.1-acd5c50.tar.gz")
+            SET(DOWNLOAD_SHA1 "3c3e362ee46b03e6ed0d9ee840cf371c2d5b0bb8")
           elseif (CMAKE_SYSTEM_PROCESSOR MATCHES "^aarch64" OR CMAKE_SYSTEM_PROCESSOR MATCHES "^arm")
-            SET(DOWNLOAD_URL "https://github.com/TileDB-Inc/TileDB/releases/download/2.20.1/tiledb-macos-arm64-2.20.1-249c024.tar.gz")
-            SET(DOWNLOAD_SHA1 "d236d781328782d96b95c7cccbd2de07d91ef115")
+            SET(DOWNLOAD_URL "https://github.com/TileDB-Inc/TileDB/releases/download/2.21.1/tiledb-macos-arm64-2.21.1-acd5c50.tar.gz")
+            SET(DOWNLOAD_SHA1 "b00e8fc9c826d7a15c6a732e60937375887b5f25")
           endif()
 
         else() # Linux
-          SET(DOWNLOAD_URL "https://github.com/TileDB-Inc/TileDB/releases/download/2.20.1/tiledb-linux-x86_64-2.20.1-249c024.tar.gz")
-          SET(DOWNLOAD_SHA1 "53ab76f43e0c61389e5b2910c8c15cfbb483a0b7")
+          SET(DOWNLOAD_URL "https://github.com/TileDB-Inc/TileDB/releases/download/2.21.1/tiledb-linux-x86_64-2.21.1-acd5c50.tar.gz")
+          SET(DOWNLOAD_SHA1 "03f03909ed9f6ea3e0bfb6124155de09dfff940e")
         endif()
 
         ExternalProject_Add(ep_tiledb
@@ -113,8 +113,8 @@ else()
     else() # Build from source
         ExternalProject_Add(ep_tiledb
           PREFIX "externals"
-          URL "https://github.com/TileDB-Inc/TileDB/archive/2.20.1.zip"
-          URL_HASH SHA1=10921fb7317e718e9bb6c88d6d410eac2ab49e10
+          URL "https://github.com/TileDB-Inc/TileDB/archive/2.21.1.zip"
+          URL_HASH SHA1=8a9a556149eda5b06ab13f6892857a4b273eaada
           DOWNLOAD_NAME "tiledb.zip"
           CMAKE_ARGS
             -DCMAKE_INSTALL_PREFIX=${EP_INSTALL_PREFIX}
@@ -133,7 +133,7 @@ else()
             -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}
             -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
             -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
-            -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
+            $<$<BOOL:${CMAKE_TOOLCHAIN_FILE}>:-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}>
             -DCMAKE_POSITION_INDEPENDENT_CODE=ON
           UPDATE_COMMAND ""
           INSTALL_COMMAND

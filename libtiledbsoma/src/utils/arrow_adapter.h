@@ -9,9 +9,9 @@
 // https://arrow.apache.org/docs/format/CDataInterface.html#exporting-a-simple-int32-array
 
 #include "nanoarrow.hpp"
-//#ifndef ARROW_SCHEMA_AND_ARRAY_DEFINED
-//#include "carrow.h"
-//#endif
+// #ifndef ARROW_SCHEMA_AND_ARRAY_DEFINED
+// #include "carrow.h"
+// #endif
 
 namespace tiledbsoma {
 
@@ -38,6 +38,8 @@ class ArrowAdapter {
    public:
     static void release_schema(struct ArrowSchema* schema);
     static void release_array(struct ArrowArray* array);
+
+    static bool _isstr(const char* format);
 
     /**
      * @brief Convert ColumnBuffer to an Arrow array.
