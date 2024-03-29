@@ -2,14 +2,42 @@
 #'
 #' @description Converts the results of a \link{soma_array_reader} or
 #' \link{sr_next} to an arrow::\link[arrow]{Table}
-#' @param x A nanoarrow_array object which is itself a wrapper around the external pointer
-#' to the Arrow array data; the schema external pointer is added to it as well
+#' @param x A List object with two pointers to Arrow array data and schema
 #' @return arrow::\link[arrow]{Table}
 #' @noRd
 soma_array_to_arrow_table <- function(x) {
   check_arrow_pointers(x)
-  arrow::as_arrow_table(x)
+  arrow::as_arrow_table(
+    arrow::RecordBatch$import_from_c(x$array_data, x$schema)
+  )
 }
+
+soma_array_to_arrow_table_concat <- function(it) {
+  stopifnot("'it' must be a 'ReadIter' object" = inherits(it, 'ReadIter'))
+  tbl <- it$read_next()
+  while (!it$read_complete()) {
+    nxt <- it$read_next()
+    tbl <- arrow::concat_tables(tbl, nxt)
+  }
+  return(tbl)
+}
+
+soma_array_to_sparse_matrix_concat <- function(it, zero_based = FALSE) {
+  stopifnot(
+    "'it' must be a 'ReadIter' object" = inherits(it, 'ReadIter'),
+    "'zero_based' must be TRUE or FALSE" = isTRUE(zero_based) || isFALSE(zero_based)
+  )
+  mat <- it$read_next()
+  while (!it$read_complete()) {
+    mat <- if (isTRUE(zero_based)) {
+      mat$sum(it$read_next())
+    } else {
+      mat + it$read_next()
+    }
+  }
+  return(mat)
+}
+
 
 #' Transformer function: Arrow table to Matrix::sparseMatrix
 #'

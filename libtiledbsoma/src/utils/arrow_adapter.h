@@ -8,11 +8,9 @@
 // https://arrow.apache.org/docs/format/Columnar.html#buffer-listing-for-each-layout
 // https://arrow.apache.org/docs/format/CDataInterface.html#exporting-a-simple-int32-array
 
-#include "nanoarrow.hpp"
-// #ifndef ARROW_SCHEMA_AND_ARRAY_DEFINED
-// #include "carrow.h"
-// #endif
-
+#ifndef ARROW_SCHEMA_AND_ARRAY_DEFINED
+#include "carrow.h"
+#endif
 namespace tiledbsoma {
 
 using namespace tiledb;
@@ -61,8 +59,6 @@ class ArrowAdapter {
      */
     static std::string_view to_arrow_format(
         tiledb_datatype_t datatype, bool use_large = true);
-
-    static enum ArrowType to_nanoarrow_type(std::string_view sv);
 
    private:
     static std::pair<const void*, std::size_t> _get_data_and_length(

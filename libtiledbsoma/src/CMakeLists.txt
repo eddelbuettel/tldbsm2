@@ -69,7 +69,6 @@ add_library(TILEDB_SOMA_OBJECTS OBJECT
   ${CMAKE_CURRENT_SOURCE_DIR}/utils/stats.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/utils/util.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/utils/version.cc
-  ${CMAKE_CURRENT_SOURCE_DIR}/utils/nanoarrow.c
 
   ${CMAKE_CURRENT_SOURCE_DIR}/external/src/thread_pool/thread_pool.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/external/src/thread_pool/status.cc
@@ -215,8 +214,6 @@ install(FILES
 
 install(FILES
   ${CMAKE_CURRENT_SOURCE_DIR}/utils/carrow.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/utils/nanoarrow.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/utils/nanoarrow.hpp
   DESTINATION "include/tiledbsoma/utils/"
 )
 

@@ -92,14 +92,16 @@ sr_complete <- function(sr) {
     .Call(`_tiledbsoma_sr_complete`, sr)
 }
 
-#' @noRd
-#' @import nanoarrow
-create_empty_arrow_table <- function() {
-    .Call(`_tiledbsoma_create_empty_arrow_table`)
-}
-
 sr_next <- function(sr) {
     .Call(`_tiledbsoma_sr_next`, sr)
+}
+
+sr_reset <- function(sr) {
+    invisible(.Call(`_tiledbsoma_sr_reset`, sr))
+}
+
+sr_set_dim_points <- function(sr, dim, points) {
+    invisible(.Call(`_tiledbsoma_sr_set_dim_points`, sr, dim, points))
 }
 
 #' TileDB SOMA statistics
