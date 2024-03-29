@@ -62,7 +62,7 @@ void ArrowAdapter::release_schema(struct ArrowSchema* schema) {
         }
         if (dict->release != nullptr) {
             //delete dict;
-            //free(dict);
+            free(dict);
             dict = nullptr;
         }
     }
@@ -111,7 +111,7 @@ std::unique_ptr<ArrowSchema> ArrowAdapter::arrow_schema_from_tiledb_array(
     auto nattr = tiledb_schema.attribute_num();
 
     std::unique_ptr<ArrowSchema> arrow_schema = std::make_unique<ArrowSchema>();
-    arrow_schema->format = "+s";
+    arrow_schema->format = strdup("+s");
     arrow_schema->n_children = ndim + nattr;
     arrow_schema->release = &ArrowAdapter::release_schema;
     arrow_schema->children = new ArrowSchema*[arrow_schema->n_children];
@@ -121,7 +121,7 @@ std::unique_ptr<ArrowSchema> ArrowAdapter::arrow_schema_from_tiledb_array(
     for (uint32_t i = 0; i < ndim; ++i) {
         auto dim = tiledb_schema.domain().dimension(i);
         child = arrow_schema->children[i] = new ArrowSchema;
-        child->format = ArrowAdapter::to_arrow_format(dim.type()).data();
+        child->format = strdup(ArrowAdapter::to_arrow_format(dim.type()).data());
         child->name = strdup(dim.name().c_str());
         child->metadata = nullptr;
         child->flags = 0;
@@ -134,7 +134,7 @@ std::unique_ptr<ArrowSchema> ArrowAdapter::arrow_schema_from_tiledb_array(
     for (uint32_t i = 0; i < nattr; ++i) {
         auto attr = tiledb_schema.attribute(i);
         child = arrow_schema->children[ndim + i] = new ArrowSchema;
-        child->format = ArrowAdapter::to_arrow_format(attr.type()).data();
+        child->format = strdup(ArrowAdapter::to_arrow_format(attr.type()).data());
         child->name = strdup(attr.name().c_str());
         child->metadata = nullptr;
         child->flags = attr.nullable() ? ARROW_FLAG_NULLABLE : 0;
@@ -262,8 +262,8 @@ ArrowAdapter::to_arrow(std::shared_ptr<ColumnBuffer> column) {
     std::unique_ptr<ArrowSchema> schema = std::make_unique<ArrowSchema>();
     std::unique_ptr<ArrowArray> array = std::make_unique<ArrowArray>();
 
-    schema->format = to_arrow_format(column->type()).data();
-    schema->name = column->name().data();
+    schema->format = strdup(to_arrow_format(column->type()).data());
+    schema->name = strdup(column->name().data());
     schema->metadata = nullptr;
     schema->flags = 0;
     schema->n_children = 0;
