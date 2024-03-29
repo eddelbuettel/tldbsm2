@@ -62,7 +62,7 @@ void ArrowAdapter::release_schema(struct ArrowSchema* schema) {
         }
         if (dict->release != nullptr) {
             //delete dict;
-            free(dict);
+            //free(dict);
             dict = nullptr;
         }
     }
