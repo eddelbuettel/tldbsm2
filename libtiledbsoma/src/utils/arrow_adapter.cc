@@ -61,7 +61,8 @@ void ArrowAdapter::release_schema(struct ArrowSchema* schema) {
             dict->format = nullptr;
         }
         if (dict->release != nullptr) {
-            delete dict;
+            //delete dict;
+            free(dict);
             dict = nullptr;
         }
     }
@@ -83,7 +84,8 @@ void ArrowAdapter::release_array(struct ArrowArray* array) {
     delete arrow_buffer;
 
     if (array->buffers != nullptr) {
-        delete[] array->buffers;
+        //delete[] array->buffers;
+        free(array->buffers);
     }
 
     struct ArrowArray* dict = array->dictionary;
@@ -93,7 +95,8 @@ void ArrowAdapter::release_array(struct ArrowArray* array) {
             dict->buffers = nullptr;
         }
         if (dict->release != nullptr) {
-            delete dict;
+            //delete dict;
+            free(dict);
             dict = nullptr;
         }
     }
@@ -184,7 +187,8 @@ std::pair<const void*, std::size_t> ArrowAdapter::_get_data_and_length(
 
             // Allocate a single byte to copy the bits into
             size_t sz = 1;
-            dst = new const void*[sz];
+            //dst = new const void*[sz];
+            dst = (void*) malloc(sz);
             std::memcpy((void*)dst, &src, sz);
 
             return std::pair(dst, data.size());
@@ -298,7 +302,7 @@ ArrowAdapter::to_arrow(std::shared_ptr<ColumnBuffer> column) {
         column->name(),
         column.use_count()));
 
-    array->buffers = new const void*[n_buffers];
+    array->buffers = (const void**) malloc(n_buffers * sizeof(void*)); //new const void*[n_buffers];
     assert(array->buffers != nullptr);
     array->buffers[0] = nullptr;                                   // validity
     array->buffers[n_buffers - 1] = column->data<void*>().data();  // data
@@ -328,8 +332,8 @@ ArrowAdapter::to_arrow(std::shared_ptr<ColumnBuffer> column) {
     }
 
     if (column->has_enumeration()) {
-        auto dict_sch = new ArrowSchema;
-        auto dict_arr = new ArrowArray;
+        auto dict_sch = (ArrowSchema*) malloc(sizeof(ArrowSchema));
+        auto dict_arr = (ArrowArray*) malloc(sizeof(ArrowArray));
 
         auto enmr = column->get_enumeration_info();
         dict_sch->format = strdup(to_arrow_format(enmr->type(), false).data());
@@ -353,7 +357,7 @@ ArrowAdapter::to_arrow(std::shared_ptr<ColumnBuffer> column) {
         dict_arr->release = &release_array;
         dict_arr->private_data = nullptr;
 
-        dict_arr->buffers = new const void*[n_buf];
+        dict_arr->buffers = (const void**) malloc(n_buf*sizeof(void*)); // new const void*[n_buf];
         dict_arr->buffers[0] = nullptr;  // validity: none here
 
         // TODO string types currently get the data and offset
