@@ -40,7 +40,7 @@ using namespace tiledb;
 
 void ArrowAdapter::release_schema(struct ArrowSchema* schema) {
     schema->release = nullptr;
-
+#if 0
     for (int i = 0; i < schema->n_children; ++i) {
         struct ArrowSchema* child = schema->children[i];
         if (schema->name != nullptr) {
@@ -66,11 +66,12 @@ void ArrowAdapter::release_schema(struct ArrowSchema* schema) {
             dict = nullptr;
         }
     }
-
+#endif
     LOG_TRACE("[ArrowAdapter] release_schema");
 }
 
 void ArrowAdapter::release_array(struct ArrowArray* array) {
+#if 0
     auto arrow_buffer = static_cast<ArrowBuffer*>(array->private_data);
 
     LOG_TRACE(fmt::format(
@@ -81,7 +82,7 @@ void ArrowAdapter::release_array(struct ArrowArray* array) {
     // Delete the ArrowBuffer, which was allocated with new.
     // If the ArrowBuffer.buffer_ shared_ptr is the last reference to the
     // underlying ColumnBuffer, the ColumnBuffer will be deleted.
-    //delete arrow_buffer;
+    delete arrow_buffer;
 
     if (array->buffers != nullptr) {
         //delete[] array->buffers;
@@ -100,12 +101,14 @@ void ArrowAdapter::release_array(struct ArrowArray* array) {
             dict = nullptr;
         }
     }
-
+#endif
     array->release = nullptr;
 }
 
 std::unique_ptr<ArrowSchema> ArrowAdapter::arrow_schema_from_tiledb_array(
     std::shared_ptr<Context> ctx, std::shared_ptr<Array> tiledb_array) {
+    LOG_WARN("[arrow_schema_from_tiledb_array] entered");
+
     auto tiledb_schema = tiledb_array->schema();
     auto ndim = tiledb_schema.domain().ndim();
     auto nattr = tiledb_schema.attribute_num();
