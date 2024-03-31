@@ -81,7 +81,7 @@ void ArrowAdapter::release_array(struct ArrowArray* array) {
     // Delete the ArrowBuffer, which was allocated with new.
     // If the ArrowBuffer.buffer_ shared_ptr is the last reference to the
     // underlying ColumnBuffer, the ColumnBuffer will be deleted.
-    delete arrow_buffer;
+    //delete arrow_buffer;
 
     if (array->buffers != nullptr) {
         //delete[] array->buffers;
