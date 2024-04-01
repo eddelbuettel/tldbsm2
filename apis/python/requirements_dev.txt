@@ -1,0 +1,7 @@
+black
+ruff
+pytest
+pytest-cov
+sparse
+typeguard==4.2.1
+types-setuptools

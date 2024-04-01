@@ -1,0 +1,77 @@
+import tempfile
+
+import pytest
+
+import tiledbsoma.io
+import tiledbsoma.io._registration.signatures as signatures
+from tiledbsoma._util import verify_obs_var
+
+
+def test_signature_serdes(h5ad_path, adata):
+    sig = signatures.Signature.from_h5ad(h5ad_path.as_posix())
+    text1 = sig.to_json()
+    assert "obs_schema" in text1
+    assert "var_schema" in text1
+    assert sig == signatures.Signature.from_json(text1)
+
+    original = adata.copy()
+    sig = signatures.Signature.from_anndata(adata)
+    verify_obs_var(original, adata)
+
+    text2 = sig.to_json()
+    assert sig == signatures.Signature.from_json(text2)
+
+    assert text1 == text2
+
+    tempdir = tempfile.TemporaryDirectory()
+    output_path = tempdir.name
+
+    uri = tiledbsoma.io.from_anndata(output_path, adata, "RNA")
+    verify_obs_var(original, adata)
+
+    sig = signatures.Signature.from_soma_experiment(uri)
+    text3 = sig.to_json()
+    assert sig == signatures.Signature.from_json(text3)
+
+    assert text1 == text3
+
+
+def test_compatible(adata):
+    # Check that zero inputs result in zero incompatibility
+    signatures.Signature.check_compatible({})
+
+    original = adata.copy()
+    sig1 = signatures.Signature.from_anndata(adata)
+    verify_obs_var(original, adata)
+
+    tempdir = tempfile.TemporaryDirectory()
+    output_path = tempdir.name
+    uri = tiledbsoma.io.from_anndata(output_path, adata, "RNA")
+    verify_obs_var(original, adata)
+    sig2 = signatures.Signature.from_soma_experiment(uri)
+
+    # Check that single inputs result in zero incompatibility
+    signatures.Signature.check_compatible({"anndata": sig1})  # no throw
+    signatures.Signature.check_compatible({"experiment": sig2})  # no throw
+
+    # Check that AnnData/H5AD is compatible with itself; likewise with SOMA Experiment
+    signatures.Signature.check_compatible({"anndata": sig1, "same": sig1})  # no throw
+    signatures.Signature.check_compatible(
+        {"experiment": sig2, "same": sig2}
+    )  # no throw
+
+    # Check compatibility of identical AnnData / SOMA experiment.
+    signatures.Signature.check_compatible(
+        {"anndata": sig1, "experiment": sig2}
+    )  # no throw
+
+    # Check incompatibility of modified AnnData
+    adata3 = adata
+    del adata3.obs["groups"]
+
+    original = adata3.copy()
+    sig3 = signatures.Signature.from_anndata(adata3)
+    verify_obs_var(original, adata3)
+
+    with pytest.raises(ValueError):
+        signatures.Signature.check_compatible({"orig": sig1, "anndata3": sig3})
