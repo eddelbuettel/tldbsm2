@@ -445,7 +445,8 @@ ArrowAdapter::to_arrow(std::shared_ptr<ColumnBuffer> column) {
         exitIfError(
             ArrowArrayAllocateChildren(dict_arr, 0),
             "Bad array children alloc");
-        const int n_buf = ArrowAdapter::_isstr(dict_sch->format) == 0 ? 3 : 2;
+        const int n_buf = ArrowAdapter::_isstr(dict_sch->format) == true ? 3 :
+                                                                           2;
         dict_arr->buffers = (const void**)malloc(sizeof(void*) * n_buf);
         dict_arr->buffers[0] = nullptr;  // validity: none here
         dict_arr->release = &release_array;
@@ -582,8 +583,8 @@ enum ArrowType ArrowAdapter::to_nanoarrow_type(std::string_view sv) {
     else if (sv == "Z")
         return NANOARROW_TYPE_LARGE_BINARY;
     else
-        throw TileDBSOMAError(fmt::format(
-            "ArrowAdapter: Unsupported TileDB datatype string: {} ", sv));
+        throw TileDBSOMAError(
+            fmt::format("ArrowAdapter: Unsupported Arrow format: {} ", sv));
 }
 
 }  // namespace tiledbsoma

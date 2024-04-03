@@ -5,9 +5,9 @@
 
 //#define RCPP_DEBUG_LEVEL 5
 
-#include <Rcpp.h>               // for R interface to C++
-#include <nanoarrow/r.h>		// for C interface to Arrow
-#include <nanoarrow.h>
+#include <Rcpp.h>          			     // for R interface to C++
+#include <nanoarrow/r.h>				 // for C interface to Arrow (via R package nanoarrow)
+#include <tiledbsoma/utils/nanoarrow.h>
 
 #include <tiledb/tiledb>
 #if TILEDB_VERSION_MAJOR == 2 && TILEDB_VERSION_MINOR >= 4
@@ -81,8 +81,6 @@ Rcpp::List sr_setup(const std::string& uri,
                     std::string result_order = "auto",
                     Rcpp::Nullable<Rcpp::Datetime> timestamp_end = R_NilValue,
                     const std::string& loglevel = "auto") {
-
-    //Rcpp::XPtr<tdbs::SOMAArray> sr_setup(const std::string& uri,
 
     if (loglevel != "auto") {
         spdl::set_level(loglevel);
@@ -170,7 +168,7 @@ bool sr_complete(Rcpp::XPtr<tdbs::SOMAArray> sr) {
 //' @noRd
 //' @import nanoarrow
 // [[Rcpp::export]]
-nanoarrowXPtr create_empty_arrow_table() {
+SEXP create_empty_arrow_table() {
     int ncol = 0;
 
     // Schema first
@@ -195,7 +193,7 @@ nanoarrowXPtr create_empty_arrow_table() {
 
 
 // [[Rcpp::export]]
-nanoarrowXPtr sr_next(Rcpp::XPtr<tdbs::SOMAArray> sr) {
+SEXP sr_next(Rcpp::XPtr<tdbs::SOMAArray> sr) {
    check_xptr_tag<tdbs::SOMAArray>(sr);
 
    if (sr_complete(sr)) {
@@ -232,10 +230,6 @@ nanoarrowXPtr sr_next(Rcpp::XPtr<tdbs::SOMAArray> sr) {
    arr->length = 0;             // initial value
 
    for (size_t i=0; i<ncol; i++) {
-       // this allocates, and properly wraps as external pointers controlling lifetime
-       //Rcpp::XPtr<ArrowSchema> chldschemaxp = schema_owning_xptr();
-       //Rcpp::XPtr<ArrowArray> chldarrayxp = array_owning_xptr();
-
        spdl::trace("[sr_next] Accessing {} at {}", names[i], i);
 
        // now buf is a shared_ptr to ColumnBuffer
@@ -244,8 +238,6 @@ nanoarrowXPtr sr_next(Rcpp::XPtr<tdbs::SOMAArray> sr) {
        // this is pair of array and schema pointer
        auto pp = tdbs::ArrowAdapter::to_arrow(buf);
 
-       //memcpy((void*) sch->children[i], pp.second.get(), sizeof(ArrowSchema));
-       //memcpy((void*) arr->children[i], pp.first.get(), sizeof(ArrowArray));
        ArrowArrayMove(pp.first.get(),   arr->children[i]);
        ArrowSchemaMove(pp.second.get(), sch->children[i]);
 

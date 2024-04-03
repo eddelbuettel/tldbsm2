@@ -1,7 +1,7 @@
-#include <Rcpp.h>               // for R interface to C++
-#include <nanoarrow/r.h>        // for C interface to Arrow
-#include <nanoarrow.hpp>        // for C/C++ interface to Arrow
-#include <RcppInt64>            // for fromInteger64
+#include <Rcpp.h>               			// for R interface to C++
+#include <nanoarrow/r.h>        			// for C interface to Arrow (via R package)
+#include <tiledbsoma/utils/nanoarrow.hpp>   // for C/C++ interface to Arrow
+#include <RcppInt64>            			// for fromInteger64
 
 // we currently get deprecation warnings by default which are noisy
 #ifndef TILEDB_NO_API_DEPRECATION_WARNINGS
@@ -49,15 +49,15 @@ Rcpp::XPtr<ArrowArray> array_setup_struct(Rcpp::XPtr<ArrowArray> arrxp, int64_t 
 
 //' @noRd
 // [[Rcpp::export(soma_array_reader_impl)]]
-nanoarrowXPtr soma_array_reader(const std::string& uri,
-                                Rcpp::Nullable<Rcpp::CharacterVector> colnames = R_NilValue,
-                                Rcpp::Nullable<Rcpp::XPtr<tiledb::QueryCondition>> qc = R_NilValue,
-                                Rcpp::Nullable<Rcpp::List> dim_points = R_NilValue,
-                                Rcpp::Nullable<Rcpp::List> dim_ranges = R_NilValue,
-                                std::string batch_size = "auto",
-                                std::string result_order = "auto",
-                                const std::string& loglevel = "auto",
-                                Rcpp::Nullable<Rcpp::CharacterVector> config = R_NilValue) {
+SEXP soma_array_reader(const std::string& uri,
+                       Rcpp::Nullable<Rcpp::CharacterVector> colnames = R_NilValue,
+                       Rcpp::Nullable<Rcpp::XPtr<tiledb::QueryCondition>> qc = R_NilValue,
+                       Rcpp::Nullable<Rcpp::List> dim_points = R_NilValue,
+                       Rcpp::Nullable<Rcpp::List> dim_ranges = R_NilValue,
+                       std::string batch_size = "auto",
+                       std::string result_order = "auto",
+                       const std::string& loglevel = "auto",
+                       Rcpp::Nullable<Rcpp::CharacterVector> config = R_NilValue) {
 
     if (loglevel != "auto") {
         spdl::set_level(loglevel);
