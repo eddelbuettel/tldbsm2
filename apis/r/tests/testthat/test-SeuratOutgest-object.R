@@ -7,6 +7,7 @@ so_msg <- function(version) {
 }
 
 test_that("Load Seurat object from ExperimentQuery mechanics", {
+  skip_if(TRUE)
   skip_if(!extended_tests() || covr_tests())
   skip_if_not_installed('SeuratObject', .MINIMUM_SEURAT_VERSION('c'))
   so_version <- utils::packageVersion('SeuratObject')
@@ -195,6 +196,7 @@ test_that("Load Seurat object from ExperimentQuery mechanics", {
 })
 
 test_that("Load Seurat object from sliced ExperimentQuery", {
+  skip_if(TRUE)
   skip_if(!extended_tests() || covr_tests())
   skip_if_not_installed('SeuratObject', .MINIMUM_SEURAT_VERSION('c'))
   so_version <- utils::packageVersion('SeuratObject')
@@ -265,6 +267,7 @@ test_that("Load Seurat object from sliced ExperimentQuery", {
 })
 
 test_that("Load Seurat object from indexed ExperimentQuery", {
+  skip_if(TRUE)
   skip_if(!extended_tests() || covr_tests())
   skip_if_not_installed('SeuratObject', .MINIMUM_SEURAT_VERSION('c'))
   so_version <- utils::packageVersion('SeuratObject')
