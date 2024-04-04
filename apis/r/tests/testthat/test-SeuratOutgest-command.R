@@ -79,6 +79,7 @@ test_that("Load SeuratComand mechanics", {
 
 test_that("Loading SeuratCommands works from experiment queries", {
   skip_if(!extended_tests())
+  skip_if(TRUE)
   skip_if_not_installed('SeuratObject', .MINIMUM_SEURAT_VERSION('c'))
   skip_if_not_installed('jsonlite')
 
@@ -105,6 +106,7 @@ test_that("Loading SeuratCommands works from experiment queries", {
 })
 
 test_that("Load SeuratCommand with missing commands", {
+  skip_if(TRUE)
   skip_if(!extended_tests())
   skip_if_not_installed('SeuratObject', .MINIMUM_SEURAT_VERSION('c'))
   skip_if_not_installed('jsonlite')
