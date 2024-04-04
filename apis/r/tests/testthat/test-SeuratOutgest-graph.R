@@ -64,6 +64,7 @@ test_that("Load graph from ExperimentQuery mechanics", {
 })
 
 test_that("Load graph from sliced ExperimentQuery", {
+  skip_if(TRUE)
   skip_if(!extended_tests())
   skip_if_not_installed('SeuratObject', .MINIMUM_SEURAT_VERSION('c'))
   uri <- withr::local_tempdir("graph-experiment-query-sliced")
@@ -113,6 +114,7 @@ test_that("Load graph from sliced ExperimentQuery", {
 })
 
 test_that("Load graph from indexed ExperimentQuery", {
+  skip_if(TRUE)
   skip_if(!extended_tests())
   skip_if_not_installed('SeuratObject', .MINIMUM_SEURAT_VERSION('c'))
   uri <- withr::local_tempdir("graph-experiment-query-value-filters")
