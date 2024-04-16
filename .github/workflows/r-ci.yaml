@@ -36,7 +36,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Show matrix OS
         run: echo "matrix.os:" ${{ matrix.os }}
@@ -89,8 +89,8 @@ jobs:
         if: ${{ matrix.os == 'macOS-latest' }}
         run: cd apis/r && _CI_PKG_TYPE_=both _CI_USE_BIOC_=true Rscript tools/install_missing_deps.R
 
-      - name: CMake
-        uses: lukka/get-cmake@latest
+      #- name: CMake
+      #  uses: lukka/get-cmake@latest
 
       #- name: MkVars
       #  run: mkdir ~/.R && echo "CXX17FLAGS=-Wno-deprecated-declarations -Wno-deprecated" > ~/.R/Makevars
@@ -102,8 +102,8 @@ jobs:
       #  if: ${{ matrix.os == 'ubuntu-latest' }}
       #  run: sudo ldconfig
       #
-      - name: Update Packages
-        run: Rscript -e 'update.packages(ask=FALSE)'
+      #- name: Update Packages
+      #  run: Rscript -e 'update.packages(ask=FALSE)'
 
       # NOT SURE THIS IS CORRECT YET -- LOOKING FOR GREEN CI
       #- name: Install 0.25 build of tiledb-r with core 2.21
@@ -141,6 +141,9 @@ jobs:
         if: ${{ matrix.os == 'ubuntu-latest' && matrix.covr == 'yes' }}
         run: apis/r/tools/r-ci.sh coverage
 
+      - name: Versions Used
+        run: Rscript -e 'tiledbsoma::show_package_versions()'
+          
       - name: View Logs
         run: apis/r/tools/r-ci.sh dump_logs
         if: failure()
