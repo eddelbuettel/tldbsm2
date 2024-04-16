@@ -57,19 +57,17 @@ class SOMAArray : public SOMAObject {
     /**
      * @brief Create a SOMAArray object at the given URI.
      *
-     * @param ctx SOMAContext
+     * @param ctx TileDB context
      * @param uri URI to create the SOMAArray
      * @param schema TileDB ArraySchema
-     * @param soma_type SOMADataFrame, SOMADenseNDArray, or SOMASparseNDArray
-     * @param timestamp Optional pair indicating timestamp start and end
-     * @return std::unique_ptr<SOMAArray>
+     * @param soma_type SOMADataFrame, SOMADenseNDArray, or
+     * SOMASparseNDArray
      */
-    static std::unique_ptr<SOMAArray> create(
+    static void create(
         std::shared_ptr<SOMAContext> ctx,
         std::string_view uri,
         ArraySchema schema,
-        std::string soma_type,
-        std::optional<TimestampRange> timestamp = std::nullopt);
+        std::string soma_type);
 
     /**
      * @brief Open an array at the specified URI and return SOMAArray
@@ -84,7 +82,7 @@ class SOMAArray : public SOMAObject {
      * @param result_order Read result order: automatic (default), rowmajor,
      * or colmajor
      * @param timestamp Optional pair indicating timestamp start and end
-     * @return std::unique_ptr<SOMAArray>
+     * @return std::unique_ptr<SOMAArray> SOMAArray
      */
     static std::unique_ptr<SOMAArray> open(
         OpenMode mode,
@@ -94,7 +92,7 @@ class SOMAArray : public SOMAObject {
         std::vector<std::string> column_names = {},
         std::string_view batch_size = "auto",
         ResultOrder result_order = ResultOrder::automatic,
-        std::optional<TimestampRange> timestamp = std::nullopt);
+        std::optional<std::pair<uint64_t, uint64_t>> timestamp = std::nullopt);
 
     /**
      * @brief Open an array at the specified URI and return SOMAArray
@@ -119,7 +117,7 @@ class SOMAArray : public SOMAObject {
         std::vector<std::string> column_names = {},
         std::string_view batch_size = "auto",
         ResultOrder result_order = ResultOrder::automatic,
-        std::optional<TimestampRange> timestamp = std::nullopt);
+        std::optional<std::pair<uint64_t, uint64_t>> timestamp = std::nullopt);
 
     //===================================================================
     //= public non-static
@@ -145,7 +143,7 @@ class SOMAArray : public SOMAObject {
         std::vector<std::string> column_names,
         std::string_view batch_size,
         ResultOrder result_order,
-        std::optional<TimestampRange> timestamp = std::nullopt);
+        std::optional<std::pair<uint64_t, uint64_t>> timestamp = std::nullopt);
 
     /**
      * @brief Construct a new SOMAArray object
@@ -167,7 +165,7 @@ class SOMAArray : public SOMAObject {
         std::vector<std::string> column_names,
         std::string_view batch_size,
         ResultOrder result_order,
-        std::optional<TimestampRange> timestamp = std::nullopt);
+        std::optional<std::pair<uint64_t, uint64_t>> timestamp = std::nullopt);
 
     SOMAArray(const SOMAArray& other)
         : uri_(other.uri_)
@@ -176,7 +174,6 @@ class SOMAArray : public SOMAObject {
         , batch_size_(other.batch_size_)
         , result_order_(other.result_order_)
         , metadata_(other.metadata_)
-        , meta_cache_arr_(other.meta_cache_arr_)
         , timestamp_(other.timestamp_)
         , mq_(std::make_unique<ManagedQuery>(
               other.arr_, other.ctx_->tiledb_ctx(), other.name_))
@@ -184,11 +181,6 @@ class SOMAArray : public SOMAObject {
         , first_read_next_(other.first_read_next_)
         , submitted_(other.submitted_) {
     }
-
-    SOMAArray(
-        std::shared_ptr<SOMAContext> ctx,
-        std::shared_ptr<Array> arr,
-        std::optional<TimestampRange> timestamp);
 
     SOMAArray(SOMAArray&&) = default;
 
@@ -220,7 +212,8 @@ class SOMAArray : public SOMAObject {
      * @param timestamp Timestamp
      */
     void open(
-        OpenMode mode, std::optional<TimestampRange> timestamp = std::nullopt);
+        OpenMode mode,
+        std::optional<std::pair<uint64_t, uint64_t>> timestamp = std::nullopt);
 
     /**
      * Close the SOMAArray object.
@@ -690,12 +683,12 @@ class SOMAArray : public SOMAObject {
     void validate(
         OpenMode mode,
         std::string_view name,
-        std::optional<TimestampRange> timestamp);
+        std::optional<std::pair<uint64_t, uint64_t>> timestamp);
 
     /**
      * Return optional timestamp pair SOMAArray was opened with.
      */
-    std::optional<TimestampRange> timestamp();
+    std::optional<std::pair<uint64_t, uint64_t>> timestamp();
 
    private:
     //===================================================================
@@ -722,20 +715,11 @@ class SOMAArray : public SOMAObject {
     // Result order
     ResultOrder result_order_;
 
-    // Metadata values need to be accessible in write mode as well. When adding
-    // or deleting values in the array, instead of closing to update to
-    // metadata; then reopening to read the array; and again reopening to
-    // restore the array back to write mode, we just store the modifications to
-    // this cache
+    // Metadata cache
     std::map<std::string, MetadataValue> metadata_;
 
-    // Array associated with metadata_. We need to keep this read-mode array
-    // alive in order for the metadata value pointers in the cache to be
-    // accessible
-    std::shared_ptr<Array> meta_cache_arr_;
-
     // Read timestamp range (start, end)
-    std::optional<TimestampRange> timestamp_;
+    std::optional<std::pair<uint64_t, uint64_t>> timestamp_;
 
     // Managed query for the array
     std::unique_ptr<ManagedQuery> mq_;
