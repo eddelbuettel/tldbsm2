@@ -39,29 +39,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # - name: Show matrix OS
-      #   run: echo "matrix.os:" ${{ matrix.os }}
-
-      # - name: Linux CPU info
-      #   if: ${{ matrix.os == 'ubuntu-latest' }}
-      #   run: cat /proc/cpuinfo
-
-      # - name: MacOS CPU info
-      #   if: ${{ matrix.os == 'macOS-latest' }}
-      #   run: sysctl -a | grep cpu
-
       - name: Bootstrap
         run: cd apis/r && tools/r-ci.sh bootstrap
-
-      # - name: Set pkgType to binary (macOS)
-      #   if: ${{ matrix.os == 'macOS-latest' }}
-      #   run: cat("\noptions(pkgType = 'binary')\n", file = "~/.Rprofile", append = TRUE)
-      #   shell: Rscript {0}
 
       - name: Install BioConductor package SingleCellExperiment
         run: cd apis/r && tools/r-ci.sh install_bioc SingleCellExperiment
 
-
+        
       # Please see https://github.com/single-cell-data/TileDB-SOMA/wiki/Branches-and-releases which
       # is crucial for anyone doing releases of TileDB-SOMA.
       #
@@ -75,32 +59,26 @@ jobs:
       # Do not remove these comments until such time as we have eliminated our dependency on
       # the TileDB-R package.
 
-      #- name: Install r-universe build of tiledb-r (macOS)
-      #  if: ${{ matrix.os == 'macOS-latest' }}
-      #  run: cd apis/r && Rscript -e "install.packages('tiledb', repos = c('https://tiledb-inc.r-universe.dev', 'https://cloud.r-project.org'))"
 
-      - name: Dependencies
+      
+      - name: Install Dependencies
         run: cd apis/r && tools/r-ci.sh install_all
 
-      - name: Install dataset packages from source (macOS)
-        if: ${{ matrix.os == 'macOS-latest' }}
-        run: cd apis/r && _CI_PKG_TYPE_=both _CI_USE_BIOC_=true Rscript tools/install_missing_deps.R
-
-
-        
-      # -- Linux case
-      # We uninstall the bspm-installed tiledb which came from CRAN and is 'too new' (and as bspm / r2u give us system binaries we use apt to uninstall)
-      # We then take advantage of the Ubuntu binary at the r-universe which requires use of a different repos path (as documented for r-universe)
-      - name: Install r-universe build of tiledb-r (Linux)
+      # -- Linux case of refining TileDB-R and TileDB-SOMA interdependence
+      # We uninstall the bspm-installed tiledb which came from CRAN and is 'too new' (and as bspm /
+      # r2u give us system binaries we use apt to uninstall) 
+      # We then take advantage of the Ubuntu binary at the r-universe which requires use of a
+      # different repos path (as documented for r-universe) 
+      - name: Install matching r-universe build of tiledb-r (Linux)
         if: ${{ matrix.os != 'macOS-latest' }}
         run: |
           sudo apt purge r-cran-tiledb            
           Rscript -e 'bspm::disable(); install.packages("tiledb", repos="https://tiledb-inc.r-universe.dev/bin/linux/jammy/4.3")'
 
-      # -- macOS case
+      # -- macOS case of refining TileDB-R and TileDB-SOMA interdependence
       # We uninstall the tiledb which came from CRAN 
-      # We then install ot from the r-universe 
-      - name: Install r-universe build of tiledb-r (macOS)
+      # We then install it from the r-universe containing the matching build
+      - name: Install matching r-universe build of tiledb-r (macOS)
         if: ${{ matrix.os == 'macOS-latest' }}
         run: Rscript -e 'remove.packages("tiledb"); install.packages("tiledb", repos="https://tiledb-inc.r-universe.dev")'
 
