@@ -39,24 +39,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Show matrix OS
-        run: echo "matrix.os:" ${{ matrix.os }}
+      # - name: Show matrix OS
+      #   run: echo "matrix.os:" ${{ matrix.os }}
 
-      - name: Linux CPU info
-        if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: cat /proc/cpuinfo
+      # - name: Linux CPU info
+      #   if: ${{ matrix.os == 'ubuntu-latest' }}
+      #   run: cat /proc/cpuinfo
 
-      - name: MacOS CPU info
-        if: ${{ matrix.os == 'macOS-latest' }}
-        run: sysctl -a | grep cpu
+      # - name: MacOS CPU info
+      #   if: ${{ matrix.os == 'macOS-latest' }}
+      #   run: sysctl -a | grep cpu
 
       - name: Bootstrap
         run: cd apis/r && tools/r-ci.sh bootstrap
 
-      - name: Set pkgType to binary (macOS)
-        if: ${{ matrix.os == 'macOS-latest' }}
-        run: cat("\noptions(pkgType = 'binary')\n", file = "~/.Rprofile", append = TRUE)
-        shell: Rscript {0}
+      # - name: Set pkgType to binary (macOS)
+      #   if: ${{ matrix.os == 'macOS-latest' }}
+      #   run: cat("\noptions(pkgType = 'binary')\n", file = "~/.Rprofile", append = TRUE)
+      #   shell: Rscript {0}
 
       - name: Install BioConductor package SingleCellExperiment
         run: cd apis/r && tools/r-ci.sh install_bioc SingleCellExperiment
@@ -94,7 +94,7 @@ jobs:
       - name: Install r-universe build of tiledb-r (Linux)
         if: ${{ matrix.os != 'macOS-latest' }}
         run: |
-          apt purge r-cran-tiledb            
+          sudo apt purge r-cran-tiledb            
           Rscript -e 'bspm::disable(); install.packages("tiledb", repos="https://tiledb-inc.r-universe.dev/bin/linux/jammy/4.3")'
 
       # -- macOS case
@@ -114,9 +114,6 @@ jobs:
         if: ${{ matrix.os == 'ubuntu-latest' && matrix.covr == 'yes' }}
         run: apis/r/tools/r-ci.sh coverage
 
-      - name: Versions Used
-        run: Rscript -e 'tiledbsoma::show_package_versions()'
-          
       - name: View Logs
         run: apis/r/tools/r-ci.sh dump_logs
         if: failure()
