@@ -41,19 +41,40 @@ using namespace tiledb;
 //= public static
 //===================================================================
 
-void SOMAArray::create(
+std::unique_ptr<SOMAArray> SOMAArray::create(
     std::shared_ptr<SOMAContext> ctx,
     std::string_view uri,
     ArraySchema schema,
-    std::string soma_type) {
+    std::string soma_type,
+    std::optional<TimestampRange> timestamp) {
     Array::create(std::string(uri), schema);
-    auto array = Array(*ctx->tiledb_ctx(), std::string(uri), TILEDB_WRITE);
-    array.put_metadata(
-        "soma_object_type",
+
+    std::shared_ptr<Array> array;
+    if (timestamp) {
+        array = std::make_shared<Array>(
+            *ctx->tiledb_ctx(),
+            std::string(uri),
+            TILEDB_WRITE,
+            TemporalPolicy(
+                TimestampStartEnd, timestamp->first, timestamp->second));
+    } else {
+        array = std::make_shared<Array>(
+            *ctx->tiledb_ctx(), std::string(uri), TILEDB_WRITE);
+    }
+
+    array->put_metadata(
+        SOMA_OBJECT_TYPE_KEY,
         TILEDB_STRING_UTF8,
         static_cast<uint32_t>(soma_type.length()),
         soma_type.c_str());
-    array.close();
+
+    array->put_metadata(
+        ENCODING_VERSION_KEY,
+        TILEDB_STRING_UTF8,
+        static_cast<uint32_t>(ENCODING_VERSION_VAL.length()),
+        ENCODING_VERSION_VAL.c_str());
+
+    return std::make_unique<SOMAArray>(ctx, array, timestamp);
 }
 
 std::unique_ptr<SOMAArray> SOMAArray::open(
@@ -64,7 +85,7 @@ std::unique_ptr<SOMAArray> SOMAArray::open(
     std::vector<std::string> column_names,
     std::string_view batch_size,
     ResultOrder result_order,
-    std::optional<std::pair<uint64_t, uint64_t>> timestamp) {
+    std::optional<TimestampRange> timestamp) {
     LOG_DEBUG(
         fmt::format("[SOMAArray] static method 'cfg' opening array '{}'", uri));
     return std::make_unique<SOMAArray>(
@@ -86,7 +107,7 @@ std::unique_ptr<SOMAArray> SOMAArray::open(
     std::vector<std::string> column_names,
     std::string_view batch_size,
     ResultOrder result_order,
-    std::optional<std::pair<uint64_t, uint64_t>> timestamp) {
+    std::optional<TimestampRange> timestamp) {
     LOG_DEBUG(
         fmt::format("[SOMAArray] static method 'ctx' opening array '{}'", uri));
     return std::make_unique<SOMAArray>(
@@ -112,7 +133,7 @@ SOMAArray::SOMAArray(
     std::vector<std::string> column_names,
     std::string_view batch_size,
     ResultOrder result_order,
-    std::optional<std::pair<uint64_t, uint64_t>> timestamp)
+    std::optional<TimestampRange> timestamp)
     : uri_(util::rstrip_uri(uri))
     , result_order_(result_order)
     , timestamp_(timestamp) {
@@ -130,7 +151,7 @@ SOMAArray::SOMAArray(
     std::vector<std::string> column_names,
     std::string_view batch_size,
     ResultOrder result_order,
-    std::optional<std::pair<uint64_t, uint64_t>> timestamp)
+    std::optional<TimestampRange> timestamp)
     : uri_(util::rstrip_uri(uri))
     , ctx_(ctx)
     , result_order_(result_order)
@@ -140,20 +161,41 @@ SOMAArray::SOMAArray(
     fill_metadata_cache();
 }
 
+SOMAArray::SOMAArray(
+    std::shared_ptr<SOMAContext> ctx,
+    std::shared_ptr<Array> arr,
+    std::optional<TimestampRange> timestamp)
+    : uri_(util::rstrip_uri(arr->uri()))
+    , ctx_(ctx)
+    , batch_size_("auto")
+    , result_order_(ResultOrder::automatic)
+    , timestamp_(timestamp)
+    , mq_(std::make_unique<ManagedQuery>(arr, ctx_->tiledb_ctx(), name_))
+    , arr_(arr) {
+    reset({}, batch_size_, result_order_);
+    fill_metadata_cache();
+}
+
 void SOMAArray::fill_metadata_cache() {
-    std::shared_ptr<Array> array;
     if (arr_->query_type() == TILEDB_WRITE) {
-        array = std::make_shared<Array>(*ctx_->tiledb_ctx(), uri_, TILEDB_READ);
+        meta_cache_arr_ = std::make_shared<Array>(
+            *ctx_->tiledb_ctx(),
+            uri_,
+            TILEDB_READ,
+            TemporalPolicy(
+                TimestampStartEnd, timestamp()->first, timestamp()->second));
     } else {
-        array = arr_;
+        meta_cache_arr_ = arr_;
     }
 
-    for (uint64_t idx = 0; idx < array->metadata_num(); ++idx) {
+    metadata_.clear();
+
+    for (uint64_t idx = 0; idx < meta_cache_arr_->metadata_num(); ++idx) {
         std::string key;
         tiledb_datatype_t value_type;
         uint32_t value_num;
         const void* value;
-        array->get_metadata_from_index(
+        meta_cache_arr_->get_metadata_from_index(
             idx, &key, &value_type, &value_num, &value);
         MetadataValue mdval(value_type, value_num, value);
         std::pair<std::string, const MetadataValue> mdpair(key, mdval);
@@ -169,26 +211,22 @@ std::shared_ptr<SOMAContext> SOMAArray::ctx() {
     return ctx_;
 };
 
-void SOMAArray::open(
-    OpenMode mode, std::optional<std::pair<uint64_t, uint64_t>> timestamp) {
-    auto tdb_mode = mode == OpenMode::read ? TILEDB_READ : TILEDB_WRITE;
-    arr_->open(tdb_mode);
-    if (timestamp) {
-        if (timestamp->first > timestamp->second) {
-            throw std::invalid_argument("timestamp start > end");
-        }
-        arr_->set_open_timestamp_start(timestamp->first);
-        arr_->set_open_timestamp_end(timestamp->second);
-        arr_->close();
-        arr_->open(tdb_mode);
-    }
+void SOMAArray::open(OpenMode mode, std::optional<TimestampRange> timestamp) {
+    timestamp_ = timestamp;
+
+    validate(mode, name_, timestamp);
     reset(column_names(), batch_size_, result_order_);
+    fill_metadata_cache();
 }
 
 void SOMAArray::close() {
+    if (arr_->query_type() == TILEDB_WRITE)
+        meta_cache_arr_->close();
+
     // Close the array through the managed query to ensure any pending queries
     // are completed.
     mq_->close();
+    metadata_.clear();
 }
 
 void SOMAArray::reset(
@@ -254,16 +292,224 @@ std::optional<std::shared_ptr<ArrayBuffers>> SOMAArray::read_next() {
     return mq_->results();
 }
 
-void SOMAArray::write(std::shared_ptr<ArrayBuffers> buffers) {
+Enumeration SOMAArray::extend_enumeration(
+    std::string_view name,
+    uint64_t num_elems,
+    const void* data,
+    uint64_t* offsets) {
+    auto enmr = ArrayExperimental::get_enumeration(
+        *ctx_->tiledb_ctx(), *arr_, std::string(name));
+
+    uint64_t max_capacity;
+    switch (tiledb_schema()->attribute(std::string(name)).type()) {
+        case TILEDB_INT8:
+            max_capacity = std::numeric_limits<int8_t>::max();
+            break;
+        case TILEDB_UINT8:
+            max_capacity = std::numeric_limits<uint8_t>::max();
+            break;
+        case TILEDB_INT16:
+            max_capacity = std::numeric_limits<int16_t>::max();
+            break;
+        case TILEDB_UINT16:
+            max_capacity = std::numeric_limits<uint16_t>::max();
+            break;
+        case TILEDB_INT32:
+            max_capacity = std::numeric_limits<int32_t>::max();
+            break;
+        case TILEDB_UINT32:
+            max_capacity = std::numeric_limits<uint32_t>::max();
+            break;
+        case TILEDB_INT64:
+            max_capacity = std::numeric_limits<int64_t>::max();
+            break;
+        case TILEDB_UINT64:
+            max_capacity = std::numeric_limits<uint64_t>::max();
+            break;
+        default:
+            throw TileDBSOMAError(
+                "Saw invalid enumeration index type when trying to extend "
+                "enumeration");
+    }
+
+    switch (enmr.type()) {
+        case TILEDB_STRING_ASCII:
+        case TILEDB_STRING_UTF8:
+        case TILEDB_CHAR: {
+            std::vector<uint64_t> offsets_v(
+                (uint32_t*)offsets, (uint32_t*)offsets + num_elems + 1);
+            std::string data_v(
+                (char*)data, (char*)data + offsets_v[offsets_v.size() - 1]);
+            std::vector<std::string> enums_in_write;
+
+            for (size_t offset_idx = 0; offset_idx < offsets_v.size() - 1;
+                 ++offset_idx) {
+                auto beg = offsets_v[offset_idx];
+                auto sz = offsets_v[offset_idx + 1] - beg;
+                enums_in_write.push_back(data_v.substr(beg, sz));
+            }
+
+            std::vector<std::string> extend_values;
+            auto enums_existing = enmr.as_vector<std::string>();
+            for (auto enum_val : enums_in_write) {
+                if (std::find(
+                        enums_existing.begin(),
+                        enums_existing.end(),
+                        enum_val) == enums_existing.end()) {
+                    extend_values.push_back(enum_val);
+                }
+            }
+
+            if (extend_values.size() != 0) {
+                // Check that we extend the enumeration values without
+                // overflowing
+                auto free_capacity = max_capacity - enums_existing.size();
+                if (free_capacity < extend_values.size()) {
+                    throw TileDBSOMAError(
+                        "Cannot extend enumeration; reached maximum capacity");
+                }
+                ArraySchemaEvolution se(*ctx_->tiledb_ctx());
+                se.extend_enumeration(enmr.extend(extend_values));
+                se.array_evolve(uri_);
+                return enmr.extend(extend_values);
+            }
+
+            return enmr;
+        }
+        case TILEDB_BOOL:
+        case TILEDB_INT8:
+            return SOMAArray::_extend_value_helper(
+                (int8_t*)data, num_elems, enmr, max_capacity);
+        case TILEDB_UINT8:
+            return SOMAArray::_extend_value_helper(
+                (uint8_t*)data, num_elems, enmr, max_capacity);
+        case TILEDB_INT16:
+            return SOMAArray::_extend_value_helper(
+                (int16_t*)data, num_elems, enmr, max_capacity);
+        case TILEDB_UINT16:
+            return SOMAArray::_extend_value_helper(
+                (uint16_t*)data, num_elems, enmr, max_capacity);
+        case TILEDB_INT32:
+            return SOMAArray::_extend_value_helper(
+                (int32_t*)data, num_elems, enmr, max_capacity);
+        case TILEDB_UINT32:
+            return SOMAArray::_extend_value_helper(
+                (uint32_t*)data, num_elems, enmr, max_capacity);
+        case TILEDB_INT64:
+            return SOMAArray::_extend_value_helper(
+                (int64_t*)data, num_elems, enmr, max_capacity);
+        case TILEDB_UINT64:
+            return SOMAArray::_extend_value_helper(
+                (uint64_t*)data, num_elems, enmr, max_capacity);
+        case TILEDB_FLOAT32:
+            return SOMAArray::_extend_value_helper(
+                (float*)data, num_elems, enmr, max_capacity);
+        case TILEDB_FLOAT64:
+            return SOMAArray::_extend_value_helper(
+                (double*)data, num_elems, enmr, max_capacity);
+        default:
+            throw TileDBSOMAError(fmt::format(
+                "ArrowAdapter: Unsupported TileDB dict datatype: {} ",
+                tiledb::impl::type_to_str(enmr.type())));
+    }
+}
+
+void SOMAArray::set_column_data(
+    std::string_view name,
+    uint64_t num_elems,
+    const void* data,
+    uint64_t* offsets,
+    uint8_t* validity) {
     if (mq_->query_type() != TILEDB_WRITE) {
         throw TileDBSOMAError("[SOMAArray] array must be opened in write mode");
     }
 
-    for (auto col_name : buffers->names()) {
-        mq_->set_column_data(col_name, buffers->at(col_name));
+    // Create the array_buffer_ as necessary
+    if (array_buffer_ == nullptr)
+        array_buffer_ = std::make_shared<ArrayBuffers>();
+
+    // Create a ColumnBuffer object instead of passing it in as an argument to
+    // `set_column_data` because ColumnBuffer::create requires a TileDB Array
+    // argument which should remain a private member of SOMAArray
+    auto column = ColumnBuffer::create(arr_, name);
+    column->set_data(num_elems, data, offsets, validity);
+
+    // Keep the ColumnBuffer alive by attaching it to the ArrayBuffers class
+    // member. Otherwise, the data held by the ColumnBuffer will be garbage
+    // collected before it is submitted to the write query
+    array_buffer_->emplace(std::string(name), column);
+
+    mq_->set_column_data(column);
+};
+
+void SOMAArray::set_array_data(
+    std::unique_ptr<ArrowSchema> arrow_schema,
+    std::unique_ptr<ArrowArray> arrow_array) {
+    if (mq_->query_type() != TILEDB_WRITE) {
+        throw TileDBSOMAError("[SOMAArray] array must be opened in write mode");
     }
 
+    // Create the array_buffer_ as necessary
+    if (array_buffer_ == nullptr)
+        array_buffer_ = std::make_shared<ArrayBuffers>();
+
+    for (auto i = 0; i < arrow_schema->n_children; ++i) {
+        auto arrow_sch_ = arrow_schema->children[i];
+        auto arrow_arr_ = arrow_array->children[i];
+
+        const void* data;
+        uint64_t* offsets = nullptr;
+
+        uint8_t* validities = nullptr;
+        if (arrow_arr_->null_count != 0) {
+            validities = (uint8_t*)arrow_arr_->buffers[0];
+        }
+
+        if (arrow_arr_->n_buffers == 3) {
+            offsets = (uint64_t*)arrow_arr_->buffers[1];
+            data = arrow_arr_->buffers[2];
+        } else {
+            data = arrow_arr_->buffers[1];
+        }
+
+        auto table_offset = arrow_arr_->offset;
+        auto data_size = tiledb::impl::type_size(
+            ArrowAdapter::to_tiledb_format(arrow_sch_->format));
+
+        if (offsets) {
+            offsets += table_offset;
+        }
+        if (validities) {
+            validities += table_offset;
+        }
+
+        // Create a ColumnBuffer object instead of passing it in as an argument
+        // to `set_column_data` because ColumnBuffer::create requires a TileDB
+        // Array argument which should remain a private member of SOMAArray
+        auto column = ColumnBuffer::create(arr_, arrow_sch_->name);
+        column->set_data(
+            arrow_arr_->length,
+            (char*)data + table_offset * data_size,
+            offsets,
+            validities);
+
+        // Keep the ColumnBuffer alive by attaching it to the ArrayBuffers class
+        // member. Otherwise, the data held by the ColumnBuffer will be garbage
+        // collected before it is submitted to the write query
+        array_buffer_->emplace(std::string(arrow_sch_->name), column);
+
+        mq_->set_column_data(column);
+    }
+};
+
+void SOMAArray::write() {
+    if (mq_->query_type() != TILEDB_WRITE) {
+        throw TileDBSOMAError("[SOMAArray] array must be opened in write mode");
+    }
     mq_->submit_write();
+
+    mq_->reset();
+    array_buffer_ = nullptr;
 }
 
 uint64_t SOMAArray::nnz() {
@@ -511,33 +757,42 @@ void SOMAArray::set_metadata(
     tiledb_datatype_t value_type,
     uint32_t value_num,
     const void* value) {
-    if (key.compare("soma_object_type") == 0) {
-        throw TileDBSOMAError("soma_object_type cannot be modified.");
-    }
+    if (key.compare(SOMA_OBJECT_TYPE_KEY) == 0)
+        throw TileDBSOMAError(SOMA_OBJECT_TYPE_KEY + " cannot be modified.");
+
+    if (key.compare(ENCODING_VERSION_KEY) == 0)
+        throw TileDBSOMAError(ENCODING_VERSION_KEY + " cannot be modified.");
 
     arr_->put_metadata(key, value_type, value_num, value);
+
     MetadataValue mdval(value_type, value_num, value);
     std::pair<std::string, const MetadataValue> mdpair(key, mdval);
     metadata_.insert(mdpair);
 }
 
 void SOMAArray::delete_metadata(const std::string& key) {
-    if (key.compare("soma_object_type") == 0) {
-        throw TileDBSOMAError("soma_object_type cannot be deleted.");
+    if (key.compare(SOMA_OBJECT_TYPE_KEY) == 0) {
+        throw TileDBSOMAError(SOMA_OBJECT_TYPE_KEY + " cannot be deleted.");
     }
+
+    if (key.compare(ENCODING_VERSION_KEY) == 0) {
+        throw TileDBSOMAError(ENCODING_VERSION_KEY + " cannot be deleted.");
+    }
+
     arr_->delete_metadata(key);
     metadata_.erase(key);
-}
-
-std::map<std::string, MetadataValue> SOMAArray::get_metadata() {
-    return metadata_;
 }
 
 std::optional<MetadataValue> SOMAArray::get_metadata(const std::string& key) {
     if (metadata_.count(key) == 0) {
         return std::nullopt;
     }
+
     return metadata_[key];
+}
+
+std::map<std::string, MetadataValue> SOMAArray::get_metadata() {
+    return metadata_;
 }
 
 bool SOMAArray::has_metadata(const std::string& key) {
@@ -551,26 +806,21 @@ uint64_t SOMAArray::metadata_num() const {
 void SOMAArray::validate(
     OpenMode mode,
     std::string_view name,
-    std::optional<std::pair<uint64_t, uint64_t>> timestamp) {
+    std::optional<TimestampRange> timestamp) {
     // Validate parameters
     auto tdb_mode = mode == OpenMode::read ? TILEDB_READ : TILEDB_WRITE;
 
     try {
         LOG_DEBUG(fmt::format("[SOMAArray] opening array '{}'", uri_));
-        arr_ = std::make_shared<Array>(*ctx_->tiledb_ctx(), uri_, tdb_mode);
         if (timestamp) {
-            if (timestamp->first > timestamp->second) {
-                throw std::invalid_argument("timestamp start > end");
-            }
-            arr_->set_open_timestamp_start(timestamp->first);
-            arr_->set_open_timestamp_end(timestamp->second);
-            arr_->close();
-            arr_->open(tdb_mode);
-            LOG_DEBUG(fmt::format(
-                "[SOMAArray] timestamp_start = {}",
-                arr_->open_timestamp_start()));
-            LOG_DEBUG(fmt::format(
-                "[SOMAArray] timestamp_end = {}", arr_->open_timestamp_end()));
+            arr_ = std::make_shared<Array>(
+                *ctx_->tiledb_ctx(),
+                uri_,
+                tdb_mode,
+                TemporalPolicy(
+                    TimestampStartEnd, timestamp->first, timestamp->second));
+        } else {
+            arr_ = std::make_shared<Array>(*ctx_->tiledb_ctx(), uri_, tdb_mode);
         }
         LOG_TRACE(fmt::format("[SOMAArray] loading enumerations"));
         ArrayExperimental::load_all_enumerations(
@@ -582,7 +832,7 @@ void SOMAArray::validate(
     }
 }
 
-std::optional<std::pair<uint64_t, uint64_t>> SOMAArray::timestamp() {
+std::optional<TimestampRange> SOMAArray::timestamp() {
     return timestamp_;
 }
 

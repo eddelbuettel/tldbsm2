@@ -41,17 +41,18 @@ using namespace tiledb;
 //= public static
 //===================================================================
 
-std::unique_ptr<SOMACollection> SOMACollection::create(
-    std::string_view uri, std::shared_ptr<SOMAContext> ctx) {
-    SOMAGroup::create(ctx, uri, "SOMACollection");
-    return SOMACollection::open(uri, OpenMode::read, ctx);
+void SOMACollection::create(
+    std::string_view uri,
+    std::shared_ptr<SOMAContext> ctx,
+    std::optional<TimestampRange> timestamp) {
+    SOMAGroup::create(ctx, uri, "SOMACollection", timestamp);
 }
 
 std::unique_ptr<SOMACollection> SOMACollection::open(
     std::string_view uri,
     OpenMode mode,
     std::shared_ptr<SOMAContext> ctx,
-    std::optional<std::pair<uint64_t, uint64_t>> timestamp) {
+    std::optional<TimestampRange> timestamp) {
     return std::make_unique<SOMACollection>(mode, uri, ctx, timestamp);
 }
 
@@ -96,7 +97,9 @@ std::shared_ptr<SOMACollection> SOMACollection::add_new_collection(
     std::string_view uri,
     URIType uri_type,
     std::shared_ptr<SOMAContext> ctx) {
-    std::shared_ptr<SOMACollection> member = SOMACollection::create(uri, ctx);
+    SOMACollection::create(uri, ctx);
+    std::shared_ptr<SOMACollection> member = SOMAExperiment::open(
+        uri, OpenMode::read, ctx);
     this->set(std::string(uri), uri_type, std::string(key));
     children_[std::string(key)] = member;
     return member;
@@ -107,9 +110,13 @@ std::shared_ptr<SOMAExperiment> SOMACollection::add_new_experiment(
     std::string_view uri,
     URIType uri_type,
     std::shared_ptr<SOMAContext> ctx,
-    ArraySchema schema) {
-    std::shared_ptr<SOMAExperiment> member = SOMAExperiment::create(
-        uri, schema, ctx);
+    std::unique_ptr<ArrowSchema> schema,
+    ColumnIndexInfo index_columns,
+    std::optional<PlatformConfig> platform_config) {
+    SOMAExperiment::create(
+        uri, std::move(schema), index_columns, ctx, platform_config);
+    std::shared_ptr<SOMAExperiment> member = SOMAExperiment::open(
+        uri, OpenMode::read, ctx);
     this->set(std::string(uri), uri_type, std::string(key));
     children_[std::string(key)] = member;
     return member;
@@ -120,9 +127,11 @@ std::shared_ptr<SOMAMeasurement> SOMACollection::add_new_measurement(
     std::string_view uri,
     URIType uri_type,
     std::shared_ptr<SOMAContext> ctx,
-    ArraySchema schema) {
-    std::shared_ptr<SOMAMeasurement> member = SOMAMeasurement::create(
-        uri, schema, ctx);
+    std::unique_ptr<ArrowSchema> schema,
+    ColumnIndexInfo index_columns) {
+    SOMAMeasurement::create(uri, std::move(schema), index_columns, ctx);
+    std::shared_ptr<SOMAMeasurement> member = SOMAMeasurement::open(
+        uri, OpenMode::read, ctx);
     this->set(std::string(uri), uri_type, std::string(key));
     children_[std::string(key)] = member;
     return member;
@@ -133,9 +142,13 @@ std::shared_ptr<SOMADataFrame> SOMACollection::add_new_dataframe(
     std::string_view uri,
     URIType uri_type,
     std::shared_ptr<SOMAContext> ctx,
-    ArraySchema schema) {
-    std::shared_ptr<SOMADataFrame> member = SOMADataFrame::create(
-        uri, schema, ctx);
+    std::unique_ptr<ArrowSchema> schema,
+    ColumnIndexInfo index_columns,
+    std::optional<PlatformConfig> platform_config) {
+    SOMADataFrame::create(
+        uri, std::move(schema), index_columns, ctx, platform_config);
+    std::shared_ptr<SOMADataFrame> member = SOMADataFrame::open(
+        uri, OpenMode::read, ctx);
     this->set(std::string(uri), uri_type, std::string(key));
     children_[std::string(key)] = member;
     return member;
@@ -147,8 +160,9 @@ std::shared_ptr<SOMADenseNDArray> SOMACollection::add_new_dense_ndarray(
     URIType uri_type,
     std::shared_ptr<SOMAContext> ctx,
     ArraySchema schema) {
-    std::shared_ptr<SOMADenseNDArray> member = SOMADenseNDArray::create(
-        uri, schema, ctx);
+    SOMADenseNDArray::create(uri, std::move(schema), ctx);
+    std::shared_ptr<SOMADenseNDArray> member = SOMADenseNDArray::open(
+        uri, OpenMode::read, ctx);
     this->set(std::string(uri), uri_type, std::string(key));
     children_[std::string(key)] = member;
     return member;
@@ -160,8 +174,9 @@ std::shared_ptr<SOMASparseNDArray> SOMACollection::add_new_sparse_ndarray(
     URIType uri_type,
     std::shared_ptr<SOMAContext> ctx,
     ArraySchema schema) {
-    std::shared_ptr<SOMASparseNDArray> member = SOMASparseNDArray::create(
-        uri, schema, ctx);
+    SOMASparseNDArray::create(uri, std::move(schema), ctx);
+    std::shared_ptr<SOMASparseNDArray> member = SOMASparseNDArray::open(
+        uri, OpenMode::read, ctx);
     this->set(std::string(uri), uri_type, std::string(key));
     children_[std::string(key)] = member;
     return member;

@@ -54,10 +54,29 @@ class SOMAExperiment : public SOMACollection {
      * @param schema TileDB ArraySchema
      * @param platform_config Optional config parameter dictionary
      */
-    static std::unique_ptr<SOMAExperiment> create(
+    static void create(
         std::string_view uri,
-        ArraySchema schema,
-        std::shared_ptr<SOMAContext> ctx);
+        std::unique_ptr<ArrowSchema> schema,
+        ColumnIndexInfo index_columns,
+        std::shared_ptr<SOMAContext> ctx,
+        std::optional<PlatformConfig> platform_config = std::nullopt,
+        std::optional<TimestampRange> timestamp = std::nullopt);
+
+    /**
+     * @brief Open a group at the specified URI and return SOMAExperiment
+     * object.
+     *
+     * @param uri URI of the array
+     * @param mode read or write
+     * @param ctx TileDB context
+     * @param timestamp Optional pair indicating timestamp start and end
+     * @return std::shared_ptr<SOMAExperiment> SOMAExperiment
+     */
+    static std::unique_ptr<SOMAExperiment> open(
+        std::string_view uri,
+        OpenMode mode,
+        std::shared_ptr<SOMAContext> ctx,
+        std::optional<TimestampRange> timestamp = std::nullopt);
 
     //===================================================================
     //= public non-static
@@ -67,7 +86,7 @@ class SOMAExperiment : public SOMACollection {
         OpenMode mode,
         std::string_view uri,
         std::shared_ptr<SOMAContext> ctx,
-        std::optional<std::pair<uint64_t, uint64_t>> timestamp = std::nullopt)
+        std::optional<TimestampRange> timestamp = std::nullopt)
         : SOMACollection(mode, uri, ctx, timestamp) {
     }
 

@@ -61,8 +61,10 @@ class SOMACollection : public SOMAGroup {
      * @param ctx TileDB context
      * @param uri URI to create the SOMACollection
      */
-    static std::unique_ptr<SOMACollection> create(
-        std::string_view uri, std::shared_ptr<SOMAContext> ctx);
+    static void create(
+        std::string_view uri,
+        std::shared_ptr<SOMAContext> ctx,
+        std::optional<TimestampRange> timestamp = std::nullopt);
 
     /**
      * @brief Open a group at the specified URI and return SOMACollection
@@ -78,7 +80,7 @@ class SOMACollection : public SOMAGroup {
         std::string_view uri,
         OpenMode mode,
         std::shared_ptr<SOMAContext> ctx,
-        std::optional<std::pair<uint64_t, uint64_t>> timestamp = std::nullopt);
+        std::optional<TimestampRange> timestamp = std::nullopt);
 
     //===================================================================
     //= public non-static
@@ -97,12 +99,12 @@ class SOMACollection : public SOMAGroup {
         OpenMode mode,
         std::string_view uri,
         std::shared_ptr<SOMAContext> ctx,
-        std::optional<std::pair<uint64_t, uint64_t>> timestamp)
+        std::optional<TimestampRange> timestamp)
         : SOMAGroup(
               mode,
               uri,
               ctx,
-              std::string(std::filesystem::path(uri).filename()),  // group name
+              std::filesystem::path(uri).filename().string(),  // group name
               timestamp){};
 
     SOMACollection(const SOMAGroup& other)
@@ -155,7 +157,9 @@ class SOMACollection : public SOMAGroup {
         std::string_view uri,
         URIType uri_type,
         std::shared_ptr<SOMAContext> ctx,
-        ArraySchema schema);
+        std::unique_ptr<ArrowSchema> schema,
+        ColumnIndexInfo index_columns,
+        std::optional<PlatformConfig> platform_config = std::nullopt);
 
     /**
      * Create and add a SOMAMeasurement to the SOMACollection.
@@ -170,7 +174,8 @@ class SOMACollection : public SOMAGroup {
         std::string_view uri,
         URIType uri_type,
         std::shared_ptr<SOMAContext> ctx,
-        ArraySchema schema);
+        std::unique_ptr<ArrowSchema> schema,
+        ColumnIndexInfo index_columns);
 
     /**
      * Create and add a SOMADataFrame to the SOMACollection.
@@ -185,7 +190,9 @@ class SOMACollection : public SOMAGroup {
         std::string_view uri,
         URIType uri_type,
         std::shared_ptr<SOMAContext> ctx,
-        ArraySchema schema);
+        std::unique_ptr<ArrowSchema> schema,
+        ColumnIndexInfo index_columns,
+        std::optional<PlatformConfig> platform_config = std::nullopt);
 
     /**
      * Create and add a SOMADenseNDArray to the SOMACollection.

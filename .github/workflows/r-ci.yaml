@@ -63,24 +63,24 @@ jobs:
       
       - name: Install Dependencies
         run: cd apis/r && tools/r-ci.sh install_all
+        
+      # # -- Linux case of refining TileDB-R and TileDB-SOMA interdependence
+      # # We uninstall the bspm-installed tiledb which came from CRAN and is 'too new' (and as bspm /
+      # # r2u give us system binaries we use apt to uninstall) 
+      # # We then take advantage of the Ubuntu binary at the r-universe which requires use of a
+      # # different repos path (as documented for r-universe) 
+      # - name: Install matching r-universe build of tiledb-r (Linux)
+      #   if: ${{ matrix.os != 'macOS-latest' }}
+      #   run: |
+      #     sudo apt purge r-cran-tiledb            
+      #     Rscript -e 'bspm::disable(); install.packages("tiledb", repos="https://tiledb-inc.r-universe.dev/bin/linux/jammy/4.3")'
 
-      # -- Linux case of refining TileDB-R and TileDB-SOMA interdependence
-      # We uninstall the bspm-installed tiledb which came from CRAN and is 'too new' (and as bspm /
-      # r2u give us system binaries we use apt to uninstall) 
-      # We then take advantage of the Ubuntu binary at the r-universe which requires use of a
-      # different repos path (as documented for r-universe) 
-      - name: Install matching r-universe build of tiledb-r (Linux)
-        if: ${{ matrix.os != 'macOS-latest' }}
-        run: |
-          sudo apt purge r-cran-tiledb            
-          Rscript -e 'bspm::disable(); install.packages("tiledb", repos="https://tiledb-inc.r-universe.dev/bin/linux/jammy/4.3")'
-
-      # -- macOS case of refining TileDB-R and TileDB-SOMA interdependence
-      # We uninstall the tiledb which came from CRAN 
-      # We then install it from the r-universe containing the matching build
-      - name: Install matching r-universe build of tiledb-r (macOS)
-        if: ${{ matrix.os == 'macOS-latest' }}
-        run: Rscript -e 'remove.packages("tiledb"); install.packages("tiledb", repos="https://tiledb-inc.r-universe.dev")'
+      # # -- macOS case of refining TileDB-R and TileDB-SOMA interdependence
+      # # We uninstall the tiledb which came from CRAN 
+      # # We then install it from the r-universe containing the matching build
+      # - name: Install matching r-universe build of tiledb-r (macOS)
+      #   if: ${{ matrix.os == 'macOS-latest' }}
+      #   run: Rscript -e 'remove.packages("tiledb"); install.packages("tiledb", repos="https://tiledb-inc.r-universe.dev")'
 
         
           

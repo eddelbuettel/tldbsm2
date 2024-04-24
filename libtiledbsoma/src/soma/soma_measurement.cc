@@ -41,21 +41,31 @@ using namespace tiledb;
 //= public static
 //===================================================================
 
-std::unique_ptr<SOMAMeasurement> SOMAMeasurement::create(
+void SOMAMeasurement::create(
     std::string_view uri,
-    ArraySchema schema,
-    std::shared_ptr<SOMAContext> ctx) {
+    std::unique_ptr<ArrowSchema> schema,
+    ColumnIndexInfo index_columns,
+    std::shared_ptr<SOMAContext> ctx,
+    std::optional<PlatformConfig> platform_config,
+    std::optional<TimestampRange> timestamp) {
     std::string exp_uri(uri);
 
-    SOMAGroup::create(ctx, exp_uri, "SOMAMeasurement");
-    SOMADataFrame::create(exp_uri + "/var", schema, ctx);
-    SOMACollection::create(exp_uri + "/X", ctx);
-    SOMACollection::create(exp_uri + "/obsm", ctx);
-    SOMACollection::create(exp_uri + "/obsp", ctx);
-    SOMACollection::create(exp_uri + "/varm", ctx);
-    SOMACollection::create(exp_uri + "/varp", ctx);
+    SOMAGroup::create(ctx, exp_uri, "SOMAMeasurement", timestamp);
+    SOMADataFrame::create(
+        exp_uri + "/var",
+        std::move(schema),
+        index_columns,
+        ctx,
+        platform_config,
+        timestamp);
+    SOMACollection::create(exp_uri + "/X", ctx, timestamp);
+    SOMACollection::create(exp_uri + "/obsm", ctx, timestamp);
+    SOMACollection::create(exp_uri + "/obsp", ctx, timestamp);
+    SOMACollection::create(exp_uri + "/varm", ctx, timestamp);
+    SOMACollection::create(exp_uri + "/varp", ctx, timestamp);
 
-    auto group = SOMAGroup::open(OpenMode::write, uri, ctx);
+    auto name = std::string(std::filesystem::path(uri).filename());
+    auto group = SOMAGroup::open(OpenMode::write, uri, ctx, name, timestamp);
     group->set(exp_uri + "/var", URIType::absolute, "var");
     group->set(exp_uri + "/X", URIType::absolute, "X");
     group->set(exp_uri + "/obsm", URIType::absolute, "obsm");
@@ -63,7 +73,13 @@ std::unique_ptr<SOMAMeasurement> SOMAMeasurement::create(
     group->set(exp_uri + "/varm", URIType::absolute, "varm");
     group->set(exp_uri + "/varp", URIType::absolute, "varp");
     group->close();
+}
 
-    return std::make_unique<SOMAMeasurement>(OpenMode::read, uri, ctx);
+std::unique_ptr<SOMAMeasurement> SOMAMeasurement::open(
+    std::string_view uri,
+    OpenMode mode,
+    std::shared_ptr<SOMAContext> ctx,
+    std::optional<TimestampRange> timestamp) {
+    return std::make_unique<SOMAMeasurement>(mode, uri, ctx, timestamp);
 }
 }  // namespace tiledbsoma

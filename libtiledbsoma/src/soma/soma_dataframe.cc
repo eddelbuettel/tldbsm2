@@ -39,12 +39,16 @@ using namespace tiledb;
 //= public static
 //===================================================================
 
-std::unique_ptr<SOMADataFrame> SOMADataFrame::create(
+void SOMADataFrame::create(
     std::string_view uri,
-    ArraySchema schema,
-    std::shared_ptr<SOMAContext> ctx) {
-    SOMAArray::create(ctx, uri, schema, "SOMADataFrame");
-    return SOMADataFrame::open(uri, OpenMode::read, ctx);
+    std::unique_ptr<ArrowSchema> schema,
+    ColumnIndexInfo index_columns,
+    std::shared_ptr<SOMAContext> ctx,
+    std::optional<PlatformConfig> platform_config,
+    std::optional<TimestampRange> timestamp) {
+    auto tiledb_schema = ArrowAdapter::tiledb_schema_from_arrow_schema(
+        ctx->tiledb_ctx(), std::move(schema), index_columns, platform_config);
+    SOMAArray::create(ctx, uri, tiledb_schema, "SOMADataFrame", timestamp);
 }
 
 std::unique_ptr<SOMADataFrame> SOMADataFrame::open(
@@ -53,7 +57,7 @@ std::unique_ptr<SOMADataFrame> SOMADataFrame::open(
     std::shared_ptr<SOMAContext> ctx,
     std::vector<std::string> column_names,
     ResultOrder result_order,
-    std::optional<std::pair<uint64_t, uint64_t>> timestamp) {
+    std::optional<TimestampRange> timestamp) {
     return std::make_unique<SOMADataFrame>(
         mode, uri, ctx, column_names, result_order, timestamp);
 }
