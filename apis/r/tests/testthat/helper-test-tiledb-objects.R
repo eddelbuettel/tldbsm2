@@ -21,7 +21,8 @@ extended_tests <- function() {
     ci_override <- tolower(Sys.getenv("CI", "")) == "force"
     ## run extended tests if CI is set, and if either not macOS or 'force' has been set
     ## (ie setting 'force' will enable on macOS too)
-    ci_set && (!macos || ci_override)
+    #ci_set && (!macos || ci_override)
+    ci_set
 }
 
 covr_tests <- function() {
