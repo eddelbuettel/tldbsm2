@@ -52,7 +52,12 @@ using namespace tiledb;
  *
  */
 class ColumnBuffer {
-    inline static const size_t DEFAULT_ALLOC_BYTES = 1 << 24;  // 16 MiB
+    // This "medium size" -- 1 GiB -- is a good balance between improved remote
+    // I/O performance (bigger = better) and friendliness for smaller hardware
+    // (e.g.  tiny CI runners). This value is good for general in-between
+    // hardware including modern laptops and a broad range of EC2 instances. CI
+    // can ask for smaller; power-server users can ask for larger.
+    inline static const size_t DEFAULT_ALLOC_BYTES = 1 << 30;
     inline static const std::string
         CONFIG_KEY_INIT_BYTES = "soma.init_buffer_bytes";
 
@@ -114,43 +119,42 @@ class ColumnBuffer {
      *
      * @param query TileDB query
      */
-    void attach(Query& query);
+    void attach(Query& query, std::optional<Subarray> subarray = std::nullopt);
 
-    /**
-     * @brief Set the ColumnBuffer's data.
-     *
-     * @param data pointer to the beginning of the data to write
-     * @param num_elems the number of elements in the column
-     */
+    template <typename T>
     void set_data(
         uint64_t num_elems,
         const void* data,
-        uint64_t* offsets = nullptr,
+        T* offsets,
         uint8_t* validity = nullptr) {
         num_cells_ = num_elems;
 
-        if (offsets != nullptr) {
-            auto num_offsets = num_elems + 1;
-            offsets_.resize(num_offsets);
-            offsets_.assign(
-                (uint64_t*)offsets, (uint64_t*)offsets + num_offsets);
+        // Ensure the offset type is either uint32_t* or uint64_t*
+        static_assert(
+            std::is_same_v<T, uint32_t> || std::is_same_v<T, uint64_t>,
+            "offsets must be either uint32_t* or uint64_t*");
 
-            data_size_ = offsets_[num_offsets - 1];
-            data_.resize(data_size_);
+        if (offsets != nullptr) {
+            offsets_ = std::vector<uint64_t>(
+                (T*)offsets, (T*)offsets + num_elems + 1);
+
+            data_size_ = offsets_[num_elems];
             data_.assign((std::byte*)data, (std::byte*)data + data_size_);
         } else {
             data_size_ = num_elems;
-            data_.resize(num_elems);
             data_.assign(
                 (std::byte*)data, (std::byte*)data + num_elems * type_size_);
         }
 
         if (is_nullable_) {
             if (validity != nullptr) {
-                validity_.assign(validity, validity + num_elems);
+                for (uint64_t i = 0; i < num_elems; ++i) {
+                    uint8_t byte = validity[i / 8];
+                    uint8_t bit = (byte >> (i % 8)) & 0x01;
+                    validity_.push_back(bit);
+                }
             } else {
-                validity_.resize(num_elems);
-                std::fill(validity_.begin(), validity_.end(), 1);
+                validity_.assign(num_elems, 1);  // Default all to valid (1)
             }
         }
     }
@@ -387,6 +391,15 @@ class ColumnBuffer {
         bool is_nullable,
         std::optional<Enumeration> enumeration,
         bool is_ordered);
+
+    void attach_buffer(Query& query);
+
+    void attach_subarray(Subarray& subarray);
+
+    template <typename T>
+    void attach_range(Subarray& subarray) {
+        subarray.add_range(name_, data<T>()[0], data<T>()[1]);
+    }
 
     //===================================================================
     //= private non-static

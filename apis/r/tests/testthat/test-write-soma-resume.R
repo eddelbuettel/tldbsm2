@@ -18,7 +18,8 @@ test_that("Factory re-creation", {
   for (i in seq_along(factories)) {
     fname <- as.character(factories[[i]])
     fxn <- eval(factories[[i]])
-    uri <- withr::local_tempdir(fname)
+    uri <- tempfile(pattern=fname)
+    if (dir.exists(uri)) unlink(uri, recursive=TRUE)
     expect_no_condition(obj <- switch(
       EXPR = fname,
       SOMADataFrameCreate = fxn(uri, schema = schema),
@@ -42,7 +43,8 @@ test_that("Resume-mode factories", {
     }
     fxn <- eval(factories[[i]])
     label <- paste0(fname, "-resume")
-    uri <- withr::local_tempdir(label)
+    uri <- tempfile(pattern=label)
+    if (dir.exists(uri)) unlink(uri, recursive=TRUE)
     # Do an initial create
     expect_no_condition(obj <- switch(
       EXPR = fname,
@@ -81,7 +83,7 @@ test_that("Resume-mode data frames", {
   skip_if(!extended_tests())
   skip_if_not_installed('datasets')
 
-  collection <- SOMACollectionCreate(withr::local_tempdir("dataframe-resume"))
+  collection <- SOMACollectionCreate(tempfile(pattern="dataframe-resume"))
   on.exit(collection$close(), add = TRUE, after = FALSE)
 
   co2 <- get_data('CO2', package = 'datasets')
@@ -193,7 +195,7 @@ test_that("Resume-mode data frames", {
 test_that("Resume-mode sparse arrays", {
   skip_if(!extended_tests())
 
-  collection <- SOMACollectionCreate(withr::local_tempdir("sparse-array-resume"))
+  collection <- SOMACollectionCreate(tempfile(pattern="sparse-array-resume"))
   on.exit(collection$close(), add = TRUE, after = FALSE)
 
   knex <- as(get_data('KNex', package = 'Matrix')$mm, "TsparseMatrix")
@@ -284,7 +286,10 @@ test_that("Resume-mode sparse arrays", {
     expected.label = "knex"
   )
   bbox <- tryCatch(
-    as.integer(ssac$used_shape(simplify = TRUE, index1 = TRUE)),
+    as.integer(suppressWarnings(
+      ssac$used_shape(simplify = TRUE, index1 = TRUE),
+      classes = "deprecatedWarning"
+    )),
     error = function(...) NULL
   )
   if (!is.null(bbox)) {
@@ -298,7 +303,7 @@ test_that("Resume-mode dense arrays", {
   skip_if(!extended_tests())
   skip_if_not_installed('datasets')
 
-  collection <- SOMACollectionCreate(withr::local_tempdir("dense-array-resume"))
+  collection <- SOMACollectionCreate(tempfile(pattern="dense-array-resume"))
   on.exit(collection$close(), add = TRUE, after = FALSE)
 
   mat <- get(x = 'state.x77', envir = getNamespace('datasets'))
@@ -342,7 +347,7 @@ test_that("Resume-mode Seurat", {
   expect_type(
     uri <- write_soma(
       pbmc_small,
-      uri = withr::local_tempdir(SeuratObject::Project(pbmc_small))
+      uri = tempfile(pattern=SeuratObject::Project(pbmc_small))
     ),
     "character"
   )
@@ -439,7 +444,7 @@ test_that("Resume-mode Seurat", {
   expect_type(
     urip <- write_soma(
       pbmc_partial,
-      uri = withr::local_tempdir("pbmc-partial"),
+      uri = tempfile(pattern="pbmc-partial"),
       shape = dim(pbmc_small)
     ),
     "character"
@@ -517,11 +522,12 @@ test_that("Resume-mode SingleCellExperiment", {
   suppressMessages(skip_if_not_installed("SingleCellExperiment", .MINIMUM_SCE_VERSION("c")))
 
   sce <- get_data('pbmc3k.final', package = "pbmc3k.sce")
+  skip_if(is.null(sce), message = "`pbmc3k.sce` is funky")
   SingleCellExperiment::mainExpName(sce) <- "RNA"
 
   # Test resume-mode when writing Seurat object
   expect_type(
-    uri <- write_soma(sce, uri = withr::local_tempdir("single-cell-experiment")),
+    uri <- write_soma(sce, uri = tempfile(pattern="single-cell-experiment")),
     "character"
   )
   exp <- SOMAExperimentOpen(uri)
@@ -720,7 +726,7 @@ test_that("Resume-mode SingleCellExperiment", {
   expect_type(
     urip <- write_soma(
       sce_partial,
-      uri = withr::local_tempdir("single-cell-experiment-partial"),
+      uri = tempfile(pattern="single-cell-experiment-partial"),
       shape = dim(sce)
     ),
     "character"

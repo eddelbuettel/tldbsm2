@@ -1,4 +1,73 @@
-# Develop
+# Unreleased
+
+## Changes
+
+* New `resize` and `tiledbsoma_upgrade_shape` accessors as part of the [new-shape project](https://github.com/single-cell-data/TileDB-SOMA/issues/2407)
+* Make use of timestamp ranges in libtiledbsoma
+* Simplify timestamp ranges; strengthen assumptions about `tiledb_timestamp`
+* Use cached timestamps in `$write()` and `$create()`
+* Fix bug in blockwise iteration
+* Lay groundwork for cached SOMA contexts within objects rather than re-creating contexts
+
+# tiledbsoma 1.13.0
+
+## Changes
+
+* Updates the TileDB Core dependency to 2.25.0
+* The `used_shape` function is deprecated; `shape` mods are [upcoming](https://github.com/single-cell-data/TileDB-SOMA/issues/2407) in TileDB-SOMA 1.14
+* Change `$reopen(mode = )` default to not flip modes; require explicit `mode` parameter to be passed
+* Add `drop_levels` to `SOMAExperimentAxisQuery` -> ecosystem outgestors to drop unused factor levels
+
+# tiledbsoma 1.12.3
+
+## Changes
+
+* Updates the TileDB Core dependency to 2.24.2
+
+# tiledbsoma 1.12.2
+
+## Changes
+
+* No R changes; only an update for Python
+
+# tiledbsoma 1.12.1
+
+## Changes
+
+* Updates to TileDB Core 2.24.1
+
+# tiledbsoma 1.12.0
+
+## Changes
+
+* Updates to TileDB Core 2.24 and TileDB-R 0.28
+* Connect re-indexer to blockwise iterator to return re-indexed tables and matrices
+
+# tiledbsoma 1.11.4
+
+## Changes
+
+* Fixes a couple bugs observed in Python
+
+# tiledbsoma 1.11.3
+
+## Changes
+
+* Fixes an intermittent segfault observed in Python
+
+# tiledbsoma 1.11.2
+
+## Changes
+
+* New `reopen` method available from R
+
+# tiledbsoma 1.11.1
+
+## Changes
+
+* No R changes; only an update for Python
+
+# tiledbsoma 1.11.0
 
 ## Changes
 
@@ -9,6 +78,73 @@
 * Make `reopen()` a public method for all `TileDBObjects`
 * Add support for resume-mode in `write_soma()`
 * Push default-setting for `TileDBCreateOptions` to `$initialize()` instead of in the accessors
+* Muffle warnings for missing command logs when outgesting SOMA to `Seurat`
+* Have `SOMADataFrame$shape()` throw a not-yet-implemented error
+* Disable running `SeuratObject::.CalcN()` when outgesting from SOMA to `Seurat`
+* Clear timestamp when using `$reopen()` to reopen at the current time
+* Add support for the re-indexer
+
+# 1.10.2
+
+* Port resume-ingest mode from Python to R
+
+# 1.10.1
+
+* This release contains a single Python-only bug fix
+
+# 1.10.0
+
+## Changes
+
+* Add support for ingestion of `SeuratCommand` logs
+* Add support for outgestion of `SeuratCommand` logs
+* Add support for reading `*m` and `*p` layers from `SOMAExperimentAxisQuery`
+* Add support for blockwise iteration
+* Make `reopen()` a public method for all `TileDBObjects`
+* Add support for resume-mode in `write_soma()`
+
+# 1.9.5
+
+* This release contains a single Python-only bug fix
+
+# 1.9.4
+
+* This release contains an in-progress blockwise iterator, work on which will be completed in a subsequent release.
+* Reverted nanoarrow use to vendored versions and refactored the use throughout R and adjusted the build steps accordingly.
+
+# 1.9.3
+
+* This release contains a single Python-only performance improvement
+
+# 1.9.2
+
+* This release contains a single Python-only modification for an API backward-compatibility update
+
+# 1.9.1
+
+* This release contains a single Python-only modification for its build process
+
+# 1.9.0
+
+## Changes
+
+* Add support for ingestion of `SeuratCommand` logs
+* Add support for outgestion of `SeuratCommand` logs
+* Add support for reading `*m` and `*p` layers from `SOMAExperimentAxisQuery`
+
+# 1.8.1
+
+## Changes
+
+* This is a release with Python changes only
+
+# 1.8.0
+
+## Changes
+
+* Add support for ingestion of `SeuratCommand` logs
+* Add support for outgestion of `SeuratCommand` logs
+
 
 # 1.7.0
 

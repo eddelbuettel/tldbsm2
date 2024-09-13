@@ -47,6 +47,26 @@ namespace tiledbsoma {
 
 using namespace tiledb;
 
+// Probably we should just use a std::tuple here
+class StatusAndException {
+   public:
+    StatusAndException(bool succeeded, std::string message)
+        : succeeded_(succeeded)
+        , message_(message) {
+    }
+
+    bool succeeded() {
+        return succeeded_;
+    }
+    std::string message() {
+        return message_;
+    }
+
+   private:
+    bool succeeded_;
+    std::string message_;
+};
+
 class ManagedQuery {
    public:
     //===================================================================
@@ -214,6 +234,9 @@ class ManagedQuery {
      */
     void set_column_data(std::shared_ptr<ColumnBuffer> buffer);
 
+    // Helper function for set_column_data
+    std::shared_ptr<ColumnBuffer> setup_column_data(std::string_view name);
+
     /**
      * @brief Configure query and allocate result buffers for reads.
      *
@@ -323,7 +346,7 @@ class ManagedQuery {
      * @brief Submit the write query.
      *
      */
-    void submit_write();
+    void submit_write(bool sort_coords = true);
 
     /**
      * @brief Get the schema of the array.
@@ -411,7 +434,7 @@ class ManagedQuery {
     bool query_submitted_ = false;
 
     // Future for asyncronous query
-    std::future<void> query_future_;
+    std::future<StatusAndException> query_future_;
 };
 };  // namespace tiledbsoma
 

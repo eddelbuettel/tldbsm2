@@ -19,7 +19,7 @@ domain [0, maxInt64), and a single attribute.
 \subsection{Duplicate writes}{
 
 As duplicate index values are not allowed, index values already present in
-the object are overwritten and new index values are added. (lifecycle: experimental)
+the object are overwritten and new index values are added. (lifecycle: maturing)
 }
 }
 \section{Super classes}{
@@ -31,6 +31,8 @@ the object are overwritten and new index values are added. (lifecycle: experimen
 \item \href{#method-SOMASparseNDArray-read}{\code{SOMASparseNDArray$read()}}
 \item \href{#method-SOMASparseNDArray-write}{\code{SOMASparseNDArray$write()}}
 \item \href{#method-SOMASparseNDArray-nnz}{\code{SOMASparseNDArray$nnz()}}
+\item \href{#method-SOMASparseNDArray-resize}{\code{SOMASparseNDArray$resize()}}
+\item \href{#method-SOMASparseNDArray-tiledbsoma_upgrade_shape}{\code{SOMASparseNDArray$tiledbsoma_upgrade_shape()}}
 \item \href{#method-SOMASparseNDArray-clone}{\code{SOMASparseNDArray$clone()}}
 }
 }
@@ -52,6 +54,7 @@ the object are overwritten and new index values are added. (lifecycle: experimen
 <li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBArray" data-id="fragment_count"><a href='../../tiledbsoma/html/TileDBArray.html#method-TileDBArray-fragment_count'><code>tiledbsoma::TileDBArray$fragment_count()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBArray" data-id="get_metadata"><a href='../../tiledbsoma/html/TileDBArray.html#method-TileDBArray-get_metadata'><code>tiledbsoma::TileDBArray$get_metadata()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBArray" data-id="index_column_names"><a href='../../tiledbsoma/html/TileDBArray.html#method-TileDBArray-index_column_names'><code>tiledbsoma::TileDBArray$index_column_names()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBArray" data-id="maxshape"><a href='../../tiledbsoma/html/TileDBArray.html#method-TileDBArray-maxshape'><code>tiledbsoma::TileDBArray$maxshape()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBArray" data-id="ndim"><a href='../../tiledbsoma/html/TileDBArray.html#method-TileDBArray-ndim'><code>tiledbsoma::TileDBArray$ndim()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBArray" data-id="non_empty_domain"><a href='../../tiledbsoma/html/TileDBArray.html#method-TileDBArray-non_empty_domain'><code>tiledbsoma::TileDBArray$non_empty_domain()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBArray" data-id="open"><a href='../../tiledbsoma/html/TileDBArray.html#method-TileDBArray-open'><code>tiledbsoma::TileDBArray$open()</code></a></span></li>
@@ -63,6 +66,8 @@ the object are overwritten and new index values are added. (lifecycle: experimen
 <li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBArray" data-id="tiledb_schema"><a href='../../tiledbsoma/html/TileDBArray.html#method-TileDBArray-tiledb_schema'><code>tiledbsoma::TileDBArray$tiledb_schema()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBArray" data-id="used_shape"><a href='../../tiledbsoma/html/TileDBArray.html#method-TileDBArray-used_shape'><code>tiledbsoma::TileDBArray$used_shape()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="SOMANDArrayBase" data-id="create"><a href='../../tiledbsoma/html/SOMANDArrayBase.html#method-SOMANDArrayBase-create'><code>tiledbsoma::SOMANDArrayBase$create()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="SOMANDArrayBase" data-id="set_data_type"><a href='../../tiledbsoma/html/SOMANDArrayBase.html#method-SOMANDArrayBase-set_data_type'><code>tiledbsoma::SOMANDArrayBase$set_data_type()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="SOMANDArrayBase" data-id="tiledbsoma_has_upgraded_shape"><a href='../../tiledbsoma/html/SOMANDArrayBase.html#method-SOMANDArrayBase-tiledbsoma_has_upgraded_shape'><code>tiledbsoma::SOMANDArrayBase$tiledbsoma_has_upgraded_shape()</code></a></span></li>
 </ul>
 </details>
 }}
@@ -104,7 +109,7 @@ read. List elements can be named when specifying a subset of dimensions.}
 \if{html}{\out{<a id="method-SOMASparseNDArray-write"></a>}}
 \if{latex}{\out{\hypertarget{method-SOMASparseNDArray-write}{}}}
 \subsection{Method \code{write()}}{
-Write matrix-like data to the array. (lifecycle: experimental)
+Write matrix-like data to the array. (lifecycle: maturing)
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{SOMASparseNDArray$write(values, bbox = NULL)}\if{html}{\out{</div>}}
 }
@@ -126,13 +131,59 @@ dimension of \code{values}. Generally should be \code{NULL}.}
 \if{html}{\out{<a id="method-SOMASparseNDArray-nnz"></a>}}
 \if{latex}{\out{\hypertarget{method-SOMASparseNDArray-nnz}{}}}
 \subsection{Method \code{nnz()}}{
-Retrieve number of non-zero elements (lifecycle: experimental)
+Retrieve number of non-zero elements (lifecycle: maturing)
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{SOMASparseNDArray$nnz()}\if{html}{\out{</div>}}
 }
 
 \subsection{Returns}{
 A scalar with the number of non-zero elements
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-SOMASparseNDArray-resize"></a>}}
+\if{latex}{\out{\hypertarget{method-SOMASparseNDArray-resize}{}}}
+\subsection{Method \code{resize()}}{
+Increases the shape of the array as specfied. Raises an error
+if the new shape is less than the current shape in any dimension. Raises
+an error if the new shape exceeds maxshape in any dimension. Raises an
+error if the array doesn't already have a shape: in that case please call
+tiledbsoma_upgrade_shape.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{SOMASparseNDArray$resize(new_shape)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{new_shape}}{A vector of integerish, of the same length as the array's \code{ndim}.}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Returns}{
+No return value
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-SOMASparseNDArray-tiledbsoma_upgrade_shape"></a>}}
+\if{latex}{\out{\hypertarget{method-SOMASparseNDArray-tiledbsoma_upgrade_shape}{}}}
+\subsection{Method \code{tiledbsoma_upgrade_shape()}}{
+Allows the array to have a resizeable shape as described in the
+TileDB-SOMA 1.15 release notes.  Raises an error if the shape exceeds maxshape in any
+dimension. Raises an error if the array already has a shape.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{SOMASparseNDArray$tiledbsoma_upgrade_shape(shape)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{shape}}{A vector of integerish, of the same length as the array's \code{ndim}.}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Returns}{
+No return value
 }
 }
 \if{html}{\out{<hr>}}

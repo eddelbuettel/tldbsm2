@@ -58,8 +58,8 @@ else()
     # NB When updating the pinned URLs here, please also update in file apis/r/tools/get_tarball.R
     if(DOWNLOAD_TILEDB_PREBUILT)
         if (WIN32) # Windows
-          SET(DOWNLOAD_URL "https://github.com/TileDB-Inc/TileDB/releases/download/2.22.0/tiledb-windows-x86_64-2.22.0-52e981e.zip")
-          SET(DOWNLOAD_SHA1 "7c1852c1c916be650cf7f75b238844104370cb1f")
+          SET(DOWNLOAD_URL "https://github.com/TileDB-Inc/TileDB/releases/download/2.26.0/tiledb-windows-x86_64-2.26.0-983b716.zip")
+          SET(DOWNLOAD_SHA1 "ee66c3f86d32aa1c88e233c25455141d764eff47")
         elseif(APPLE) # OSX
 
           # Status quo as of 2023-05-18:
@@ -76,22 +76,22 @@ else()
           #   o CMAKE_SYSTEM_PROCESSOR is x86_64
 
           if (CMAKE_OSX_ARCHITECTURES STREQUAL x86_64)
-            SET(DOWNLOAD_URL "https://github.com/TileDB-Inc/TileDB/releases/download/2.22.0/tiledb-macos-x86_64-2.22.0-52e981e.tar.gz")
-            SET(DOWNLOAD_SHA1 "a0b6b91a448aefae351cbe96c5cc2c8867eb2b07")
+            SET(DOWNLOAD_URL "https://github.com/TileDB-Inc/TileDB/releases/download/2.26.0/tiledb-macos-x86_64-2.26.0-983b716.tar.gz")
+            SET(DOWNLOAD_SHA1 "e218ef0c5c6bc7ce55e423f6ad63ca8dd0b7719e")
           elseif (CMAKE_OSX_ARCHITECTURES STREQUAL arm64)
-            SET(DOWNLOAD_URL "https://github.com/TileDB-Inc/TileDB/releases/download/2.22.0/tiledb-macos-arm64-2.22.0-52e981e.tar.gz")
-            SET(DOWNLOAD_SHA1 "838ab13090f0832e3858b88aa3aa9b38bde7c7cb")
+            SET(DOWNLOAD_URL "https://github.com/TileDB-Inc/TileDB/releases/download/2.26.0/tiledb-macos-arm64-2.26.0-983b716.tar.gz")
+            SET(DOWNLOAD_SHA1 "9372924a4e8945bdfddb5c9b1741233aa8ff504e")
           elseif (CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64)|(AMD64|amd64)|(^i.86$)")
-            SET(DOWNLOAD_URL "https://github.com/TileDB-Inc/TileDB/releases/download/2.22.0/tiledb-macos-x86_64-2.22.0-52e981e.tar.gz")
-            SET(DOWNLOAD_SHA1 "a0b6b91a448aefae351cbe96c5cc2c8867eb2b07")
+            SET(DOWNLOAD_URL "https://github.com/TileDB-Inc/TileDB/releases/download/2.26.0/tiledb-macos-x86_64-2.26.0-983b716.tar.gz")
+            SET(DOWNLOAD_SHA1 "e218ef0c5c6bc7ce55e423f6ad63ca8dd0b7719e")
           elseif (CMAKE_SYSTEM_PROCESSOR MATCHES "^aarch64" OR CMAKE_SYSTEM_PROCESSOR MATCHES "^arm")
-            SET(DOWNLOAD_URL "https://github.com/TileDB-Inc/TileDB/releases/download/2.22.0/tiledb-macos-arm64-2.22.0-52e981e.tar.gz")
-            SET(DOWNLOAD_SHA1 "838ab13090f0832e3858b88aa3aa9b38bde7c7cb")
+            SET(DOWNLOAD_URL "https://github.com/TileDB-Inc/TileDB/releases/download/2.26.0/tiledb-macos-arm64-2.26.0-983b716.tar.gz")
+            SET(DOWNLOAD_SHA1 "9372924a4e8945bdfddb5c9b1741233aa8ff504e")
           endif()
 
         else() # Linux
-          SET(DOWNLOAD_URL "https://github.com/TileDB-Inc/TileDB/releases/download/2.22.0/tiledb-linux-x86_64-2.22.0-52e981e.tar.gz")
-          SET(DOWNLOAD_SHA1 "292fdd4d4034ef7e4686da04b1ffc9e7976f1601")
+          SET(DOWNLOAD_URL "https://github.com/TileDB-Inc/TileDB/releases/download/2.26.0/tiledb-linux-x86_64-2.26.0-983b716.tar.gz")
+          SET(DOWNLOAD_SHA1 "b2abfc91285653050a4cb743a71d7c2f2f9a89c4")
         endif()
 
         ExternalProject_Add(ep_tiledb
@@ -113,8 +113,8 @@ else()
     else() # Build from source
         ExternalProject_Add(ep_tiledb
           PREFIX "externals"
-          URL "https://github.com/TileDB-Inc/TileDB/archive/2.22.0.zip"
-          URL_HASH SHA1=edce787da60547b8a3043248f1f44e86fcffc3eb
+          URL "https://github.com/TileDB-Inc/TileDB/archive/2.26.0.zip"
+          URL_HASH SHA1=a13ef37971e3271f498b71e25c4356a60804cb72
           DOWNLOAD_NAME "tiledb.zip"
           CMAKE_ARGS
             -DCMAKE_INSTALL_PREFIX=${EP_INSTALL_PREFIX}
@@ -125,6 +125,7 @@ else()
             -DTILEDB_HDFS=${TILEDB_HDFS}
             -DTILEDB_SERIALIZATION=${TILEDB_SERIALIZATION}
             -DTILEDB_WERROR=${TILEDB_WERROR}
+            -DTILEDB_REMOVE_DEPRECATIONS=${TILEDB_REMOVE_DEPRECATIONS}
             -DTILEDB_VERBOSE=${TILEDB_VERBOSE}
             -DTILEDB_TESTS=OFF
             -DCMAKE_BUILD_TYPE=$<CONFIG>

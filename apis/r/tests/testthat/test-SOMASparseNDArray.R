@@ -1,6 +1,6 @@
 test_that("SOMASparseNDArray creation", {
   skip_if(!extended_tests())
-  uri <- withr::local_tempdir("sparse-ndarray")
+  uri <- tempfile(pattern="sparse-ndarray")
   ndarray <- SOMASparseNDArrayCreate(uri, arrow::int32(), shape = c(10, 10))
 
   expect_equal(tiledb::tiledb_object_type(uri), "ARRAY")
@@ -59,6 +59,22 @@ test_that("SOMASparseNDArray creation", {
   ## shape
   expect_equal(ndarray$shape(), as.integer64(c(10, 10)))
 
+  ## maxshape
+  # TODO: more testing with current-domain feature integrated
+  # https://github.com/single-cell-data/TileDB-SOMA/issues/2407
+
+  if (.new_shape_feature_flag_is_enabled()) {
+    expect_true(ndarray$tiledbsoma_has_upgraded_shape())
+  } else {
+    expect_false(ndarray$tiledbsoma_has_upgraded_shape())
+  }
+  shape <- ndarray$shape()
+  maxshape <- ndarray$maxshape()
+  expect_equal(length(shape), length(maxshape))
+  for (i in 1:length(shape)) {
+    expect_true(maxshape[i] >= shape[i])
+  }
+
   ## ndim
   expect_equal(ndarray$ndim(), 2L)
 
@@ -80,7 +96,7 @@ test_that("SOMASparseNDArray creation", {
 
 test_that("SOMASparseNDArray read_sparse_matrix", {
   skip_if(!extended_tests())
-  uri <- withr::local_tempdir("sparse-ndarray-3")
+  uri <- tempfile(pattern="sparse-ndarray-3")
   ndarray <- SOMASparseNDArrayCreate(uri, arrow::int32(), shape = c(10, 10))
 
   # For this test, write 9x9 data into 10x10 array. Leaving the last row & column
@@ -109,7 +125,7 @@ test_that("SOMASparseNDArray read_sparse_matrix", {
 
 test_that("SOMASparseNDArray read_sparse_matrix_zero_based", {
   skip_if(!extended_tests())
-  uri <- withr::local_tempdir("sparse-ndarray")
+  uri <- tempfile(pattern="sparse-ndarray")
   ndarray <- SOMASparseNDArrayCreate(uri, arrow::int32(), shape = c(10, 10))
 
   # For this test, write 9x9 data into 10x10 array. Leaving the last row & column
@@ -148,7 +164,7 @@ test_that("SOMASparseNDArray read_sparse_matrix_zero_based", {
 
 test_that("SOMASparseNDArray creation with duplicates", {
   skip_if(!extended_tests())
-  uri <- withr::local_tempdir("sparse-ndarray")
+  uri <- tempfile(pattern="sparse-ndarray")
 
   set.seed(42)
   D <- data.frame(rows=sample(100, 10, replace=TRUE),
@@ -183,14 +199,14 @@ test_that("SOMASparseNDArray creation with duplicates", {
 
 test_that("platform_config is respected", {
   skip_if(!extended_tests())
-  uri <- withr::local_tempdir("soma-sparse-nd-array")
+  uri <- tempfile(pattern="soma-sparse-nd-array")
 
   # Set tiledb create options
   cfg <- PlatformConfig$new()
   cfg$set('tiledb', 'create', 'sparse_nd_array_dim_zstd_level', 9)
   cfg$set('tiledb', 'create', 'capacity', 8000)
   cfg$set('tiledb', 'create', 'tile_order', 'COL_MAJOR')
-  cfg$set('tiledb', 'create', 'cell_order', 'UNORDERED')
+  cfg$set('tiledb', 'create', 'cell_order', 'ROW_MAJOR')
   cfg$set('tiledb', 'create', 'offsets_filters', list("RLE"))
   cfg$set('tiledb', 'create', 'validity_filters', list("RLE", "NONE"))
   cfg$set('tiledb', 'create', 'dims', list(
@@ -230,7 +246,7 @@ test_that("platform_config is respected", {
 
   expect_equal(tiledb::capacity(tsch), 8000)
   expect_equal(tiledb::tile_order(tsch), "COL_MAJOR")
-  expect_equal(tiledb::cell_order(tsch), "UNORDERED")
+  expect_equal(tiledb::cell_order(tsch), "ROW_MAJOR")
 
   offsets_filters <- tiledb::filter_list(tsch)$offsets
   expect_equal(tiledb::nfilters(offsets_filters), 1)
@@ -284,7 +300,7 @@ test_that("platform_config is respected", {
 
 test_that("platform_config defaults", {
   skip_if(!extended_tests())
-  uri <- withr::local_tempdir("soma-sparse-nd-array")
+  uri <- tempfile(pattern="soma-sparse-nd-array")
 
   # Set tiledb create options
   cfg <- PlatformConfig$new()
@@ -321,18 +337,17 @@ test_that("platform_config defaults", {
 
 test_that("SOMASparseNDArray timestamped ops", {
   skip_if(!extended_tests())
-  uri <- withr::local_tempdir("soma-sparse-nd-array-timestamps")
+  uri <- tempfile(pattern="soma-sparse-nd-array-timestamps")
 
   # t=10: create 2x2 array and write 1 into top-left entry
-  t10 <- Sys.time()
-  snda <- SOMASparseNDArrayCreate(uri=uri, type=arrow::int16(), shape=c(2,2))
+  t10 <- as.POSIXct(10, tz = "UTC", origin = "1970-01-01")
+  snda <- SOMASparseNDArrayCreate(uri=uri, type=arrow::int16(), shape=c(2,2), tiledb_timestamp=t10)
   snda$write(Matrix::sparseMatrix(i = 1, j = 1, x = 1, dims = c(2, 2)))
   snda$close()
-  Sys.sleep(1.0)
 
   # t=20: write 1 into bottom-right entry
-  t20 <- Sys.time()
-  snda <- SOMASparseNDArrayOpen(uri=uri, mode="WRITE")
+  t20 <- as.POSIXct(20, tz = "UTC", origin = "1970-01-01")
+  snda <- SOMASparseNDArrayOpen(uri=uri, mode="WRITE", tiledb_timestamp=t20)
   snda$write(Matrix::sparseMatrix(i = 2, j = 2, x = 1, dims = c(2, 2)))
   snda$close()
 
@@ -342,7 +357,10 @@ test_that("SOMASparseNDArray timestamped ops", {
   snda$close()
 
   # read @ t=15 and see only the first write
-  snda <- SOMASparseNDArrayOpen(uri=uri, tiledb_timestamp = t10 + 0.5*as.numeric(t20 - t10))
+  snda <- SOMASparseNDArrayOpen(
+    uri = uri,
+    tiledb_timestamp = t10 + 0.5 * as.numeric(t20 - t10)
+  )
   expect_equal(sum(snda$read()$sparse_matrix()$concat()), 1)
   snda$close()
 })
@@ -350,7 +368,7 @@ test_that("SOMASparseNDArray timestamped ops", {
 test_that("SOMASparseNDArray compatibility with shape >= 2^31 - 1", {
   skip_if(!extended_tests())
   uri <- create_and_populate_32bit_sparse_nd_array(
-    uri = withr::local_tempdir("soma-32bit-sparse-nd-array")
+    uri = tempfile(pattern="soma-32bit-sparse-nd-array")
   )
 
   # Coords for all non-zero entries in the array
@@ -389,7 +407,7 @@ test_that("SOMASparseNDArray compatibility with shape >= 2^31 - 1", {
 })
 
 test_that("SOMASparseNDArray bounding box", {
-  uri <- withr::local_tempdir("sparse-ndarray-bbox")
+  uri <- tempfile(pattern="sparse-ndarray-bbox")
   nrows <- 100L
   ncols <- 500L
   ndarray <- SOMASparseNDArrayCreate(uri, type = arrow::int32(), shape = c(nrows, ncols))
@@ -416,7 +434,10 @@ test_that("SOMASparseNDArray bounding box", {
     }
   }
 
-  expect_type(bbox <- ndarray$used_shape(index1 = TRUE), 'list')
+  expect_type(
+    bbox <- suppressWarnings(ndarray$used_shape(index1 = TRUE), classes = "deprecatedWarning"),
+    'list'
+  )
   expect_length(bbox, length(dim(mat)))
   expect_equal(names(bbox), dnames)
   expect_true(all(vapply(bbox, length, integer(1L)) == 2L))
@@ -424,7 +445,10 @@ test_that("SOMASparseNDArray bounding box", {
     expect_equal(bbox[[i]], bit64::as.integer64(c(1L, dim(mat)[i])))
   }
 
-  expect_type(bbox0 <- ndarray$used_shape(index1 = FALSE), 'list')
+  expect_type(
+    bbox0 <- suppressWarnings(ndarray$used_shape(index1 = FALSE), classes = "deprecatedWarning"),
+    'list'
+  )
   expect_length(bbox0, length(dim(mat)))
   expect_equal(names(bbox0), dnames)
   expect_true(all(vapply(bbox0, length, integer(1L)) == 2L))
@@ -432,7 +456,10 @@ test_that("SOMASparseNDArray bounding box", {
     expect_equal(bbox0[[i]], bit64::as.integer64(c(0L, dim(mat)[i] - 1L)))
   }
 
-  expect_s3_class(bboxS <- ndarray$used_shape(simplify = TRUE), 'integer64')
+  expect_s3_class(
+    bboxS <- suppressWarnings(ndarray$used_shape(simplify = TRUE), classes = "deprecatedWarning"),
+    'integer64'
+  )
   expect_length(bboxS, length(dim(mat)))
   expect_equal(names(bboxS), dnames)
   for (i in seq_along(bboxS)) {
@@ -442,7 +469,7 @@ test_that("SOMASparseNDArray bounding box", {
 })
 
 test_that("SOMASparseNDArray without bounding box", {
-  uri <- withr::local_tempdir("sparse-ndarray-no-bbox")
+  uri <- tempfile(pattern="sparse-ndarray-no-bbox")
   nrows <- 100L
   ncols <- 500L
   ndarray <- SOMASparseNDArrayCreate(uri, type = arrow::int32(), shape = c(nrows, ncols))
@@ -459,11 +486,11 @@ test_that("SOMASparseNDArray without bounding box", {
 
   expect_false(all(bbox_names %in% names(tiledb::tiledb_get_all_metadata(ndarray$object))))
 
-  expect_error(ndarray$used_shape())
+  expect_error(suppressWarnings(ndarray$used_shape(), classes = "deprecatedWarning"))
 })
 
 test_that("SOMASparseNDArray with failed bounding box", {
-  uri <- withr::local_tempdir("sparse-ndarray-failed-bbox")
+  uri <- tempfile(pattern="sparse-ndarray-failed-bbox")
   nrows <- 100L
   ncols <- 500L
   ndarray <- SOMASparseNDArrayCreate(uri, type = arrow::int32(), shape = c(nrows, ncols))
@@ -489,11 +516,11 @@ test_that("SOMASparseNDArray with failed bounding box", {
 
   expect_false(all(bbox_names %in% names(tiledb::tiledb_get_all_metadata(ndarray$object))))
 
-  expect_error(ndarray$used_shape())
+  expect_error(suppressWarnings(ndarray$used_shape(), classes = "deprecatedWarning"))
 })
 
 test_that("SOMASparseNDArray bounding box implicitly-stored values", {
-  uri <- withr::local_tempdir("sparse-ndarray-bbox-implicit")
+  uri <- tempfile(pattern="sparse-ndarray-bbox-implicit")
   nrows <- 100L
   ncols <- 500L
   ndarray <- SOMASparseNDArrayCreate(uri, type = arrow::int32(), shape = c(nrows, ncols))
@@ -521,7 +548,10 @@ test_that("SOMASparseNDArray bounding box implicitly-stored values", {
     }
   }
 
-  expect_type(bbox <- ndarray$used_shape(index1 = TRUE), 'list')
+  expect_type(
+    bbox <- suppressWarnings(ndarray$used_shape(index1 = TRUE), classes = "deprecatedWarning"),
+    'list'
+  )
   expect_length(bbox, length(dim(mat)))
   expect_equal(names(bbox), dnames)
   expect_true(all(vapply(bbox, length, integer(1L)) == 2L))
@@ -529,7 +559,10 @@ test_that("SOMASparseNDArray bounding box implicitly-stored values", {
     expect_equal(bbox[[i]], bit64::as.integer64(c(1L, dim(mat)[i])))
   }
 
-  expect_type(bbox0 <- ndarray$used_shape(index1 = FALSE), 'list')
+  expect_type(
+    bbox0 <- suppressWarnings(ndarray$used_shape(index1 = FALSE), classes = "deprecatedWarning"),
+    'list'
+  )
   expect_length(bbox0, length(dim(mat)))
   expect_equal(names(bbox0), dnames)
   expect_true(all(vapply(bbox0, length, integer(1L)) == 2L))
@@ -537,7 +570,10 @@ test_that("SOMASparseNDArray bounding box implicitly-stored values", {
     expect_equal(bbox0[[i]], bit64::as.integer64(c(0L, dim(mat)[i] - 1L)))
   }
 
-  expect_s3_class(bboxS <- ndarray$used_shape(simplify = TRUE), 'integer64')
+  expect_s3_class(
+    bboxS <- suppressWarnings(ndarray$used_shape(simplify = TRUE), classes = "deprecatedWarning"),
+    'integer64'
+  )
   expect_length(bboxS, length(dim(mat)))
   expect_equal(names(bboxS), dnames)
   for (i in seq_along(bboxS)) {
@@ -551,11 +587,16 @@ test_that("SOMASparseNDArray bounding box implicitly-stored values", {
     ranges[i] <- bit64::as.integer64(max(range(slot(mat, s))))
   }
   expect_equal(ndarray$non_empty_domain(), ranges)
-  expect_true(all(ndarray$non_empty_domain() < ndarray$used_shape(simplify = TRUE)))
+  expect_true(all(
+    ndarray$non_empty_domain() < suppressWarnings(
+      ndarray$used_shape(simplify = TRUE),
+      classes = "deprecatedWarning"
+    )
+  ))
 })
 
 test_that("Bounding box assertions", {
-  uri <- withr::local_tempdir("bbox-assertions")
+  uri <- tempfile(pattern="bbox-assertions")
   nrows <- 100L
   ncols <- 500L
   ndarray <- SOMASparseNDArrayCreate(uri, type = arrow::int32(), shape = c(nrows, ncols))

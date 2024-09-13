@@ -22,9 +22,16 @@ const tiledb_xptr_object tiledb_xptr_vfs_fh_t                    { 160 };
 const tiledb_xptr_object tiledb_xptr_vlc_buf_t                   { 170 };
 const tiledb_xptr_object tiledb_xptr_vlv_buf_t                   { 180 };
 const tiledb_xptr_object tiledb_xptr_query_buf_t                 { 190 };
+const tiledb_xptr_object tiledb_xptr_somactx_wrapper_t           { 200 };
+const tiledb_xptr_object tiledb_xptr_somagrp_wrapper_t           { 210 };
 
 // the definitions above are internal to tiledb-r but we need a new value here if we want tag the external pointer
+const tiledb_xptr_object tiledb_arrow_array_t                    { 300 };
+const tiledb_xptr_object tiledb_arrow_schema_t                   { 310 };
+
 const tiledb_xptr_object tiledb_soma_reader_t                    { 500 };
+
+const tiledb_xptr_object tiledb_soma_rindexer_t                  { 600 };
 
 // templated checkers for external pointer tags
 template <typename T> const int32_t XPtrTagType                            = tiledb_xptr_default; // clang++ wants a value
@@ -49,7 +56,13 @@ template <> inline const int32_t XPtrTagType<tiledb::VFS>                  = til
 // template <> inline const int32_t XPtrTagType<vlv_buf_t>                    = tiledb_xptr_vlv_buf_t;
 // template <> inline const int32_t XPtrTagType<query_buf_t>                  = tiledb_xptr_query_buf_t;
 
-template <> inline const int32_t XPtrTagType<tdbs::SOMAArray>             = tiledb_soma_reader_t;
+template <> inline const int32_t XPtrTagType<tdbs::SOMAArray>              = tiledb_soma_reader_t;
+
+template <> inline const int32_t XPtrTagType<tdbs::IntIndexer>  	       = tiledb_soma_rindexer_t;
+
+template <> inline const int32_t XPtrTagType<somactx_wrap_t>			   = tiledb_xptr_somactx_wrapper_t;
+template <> inline const int32_t XPtrTagType<somagrp_wrap_t>			   = tiledb_xptr_somagrp_wrapper_t;
+
 
 template <typename T> Rcpp::XPtr<T> make_xptr(T* p, bool finalize=true) {
     return Rcpp::XPtr<T>(p, finalize, Rcpp::wrap(XPtrTagType<T>), R_NilValue);
@@ -57,6 +70,13 @@ template <typename T> Rcpp::XPtr<T> make_xptr(T* p, bool finalize=true) {
 
 template <typename T> Rcpp::XPtr<T> make_xptr(SEXP p) {
     return Rcpp::XPtr<T>(p);    // the default XPtr ctor with deleter on and tag and prot nil
+}
+
+inline void* xptr_addr(SEXP ptr) {
+    if (TYPEOF(ptr) != EXTPTRSXP) {
+        Rcpp::stop("Expected external pointer, received '%s'\n", Rf_type2char(TYPEOF(ptr)));
+    }
+    return R_ExternalPtrAddr(ptr);
 }
 
 template<typename T> void check_xptr_tag(Rcpp::XPtr<T> ptr) {

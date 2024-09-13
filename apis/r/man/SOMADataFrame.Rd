@@ -7,7 +7,7 @@
 \code{SOMADataFrame} is a multi-column table that must contain a column
 called \code{soma_joinid} of type \code{int64}, which contains a unique value for each
 row and is intended to act as a join key for other objects, such as
-\code{\link{SOMASparseNDArray}}.  (lifecycle: experimental)
+\code{\link{SOMASparseNDArray}}.  (lifecycle: maturing)
 }
 \section{Super classes}{
 \code{\link[tiledbsoma:TileDBObject]{tiledbsoma::TileDBObject}} -> \code{\link[tiledbsoma:TileDBArray]{tiledbsoma::TileDBArray}} -> \code{\link[tiledbsoma:SOMAArrayBase]{tiledbsoma::SOMAArrayBase}} -> \code{SOMADataFrame}
@@ -19,6 +19,9 @@ row and is intended to act as a join key for other objects, such as
 \item \href{#method-SOMADataFrame-write}{\code{SOMADataFrame$write()}}
 \item \href{#method-SOMADataFrame-read}{\code{SOMADataFrame$read()}}
 \item \href{#method-SOMADataFrame-update}{\code{SOMADataFrame$update()}}
+\item \href{#method-SOMADataFrame-shape}{\code{SOMADataFrame$shape()}}
+\item \href{#method-SOMADataFrame-maxshape}{\code{SOMADataFrame$maxshape()}}
+\item \href{#method-SOMADataFrame-tiledbsoma_has_upgraded_domain}{\code{SOMADataFrame$tiledbsoma_has_upgraded_domain()}}
 \item \href{#method-SOMADataFrame-clone}{\code{SOMADataFrame$clone()}}
 }
 }
@@ -46,7 +49,6 @@ row and is intended to act as a join key for other objects, such as
 <li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBArray" data-id="print"><a href='../../tiledbsoma/html/TileDBArray.html#method-TileDBArray-print'><code>tiledbsoma::TileDBArray$print()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBArray" data-id="schema"><a href='../../tiledbsoma/html/TileDBArray.html#method-TileDBArray-schema'><code>tiledbsoma::TileDBArray$schema()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBArray" data-id="set_metadata"><a href='../../tiledbsoma/html/TileDBArray.html#method-TileDBArray-set_metadata'><code>tiledbsoma::TileDBArray$set_metadata()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBArray" data-id="shape"><a href='../../tiledbsoma/html/TileDBArray.html#method-TileDBArray-shape'><code>tiledbsoma::TileDBArray$shape()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBArray" data-id="tiledb_array"><a href='../../tiledbsoma/html/TileDBArray.html#method-TileDBArray-tiledb_array'><code>tiledbsoma::TileDBArray$tiledb_array()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBArray" data-id="tiledb_schema"><a href='../../tiledbsoma/html/TileDBArray.html#method-TileDBArray-tiledb_schema'><code>tiledbsoma::TileDBArray$tiledb_schema()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="tiledbsoma" data-topic="TileDBArray" data-id="used_shape"><a href='../../tiledbsoma/html/TileDBArray.html#method-TileDBArray-used_shape'><code>tiledbsoma::TileDBArray$used_shape()</code></a></span></li>
@@ -57,7 +59,7 @@ row and is intended to act as a join key for other objects, such as
 \if{html}{\out{<a id="method-SOMADataFrame-create"></a>}}
 \if{latex}{\out{\hypertarget{method-SOMADataFrame-create}{}}}
 \subsection{Method \code{create()}}{
-Create (lifecycle: experimental)
+Create (lifecycle: maturing)
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{SOMADataFrame$create(
   schema,
@@ -89,7 +91,7 @@ as \code{create()} is considered internal and should not be called directly.}
 \if{html}{\out{<a id="method-SOMADataFrame-write"></a>}}
 \if{latex}{\out{\hypertarget{method-SOMADataFrame-write}{}}}
 \subsection{Method \code{write()}}{
-Write (lifecycle: experimental)
+Write (lifecycle: maturing)
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{SOMADataFrame$write(values)}\if{html}{\out{</div>}}
 }
@@ -108,7 +110,7 @@ schema for \code{values} must match the schema for the \code{SOMADataFrame}.}
 \if{html}{\out{<a id="method-SOMADataFrame-read"></a>}}
 \if{latex}{\out{\hypertarget{method-SOMADataFrame-read}{}}}
 \subsection{Method \code{read()}}{
-Read (lifecycle: experimental)
+Read (lifecycle: maturing)
 Read a user-defined subset of data, addressed by the dataframe indexing
 column, and optionally filtered.
 \subsection{Usage}{
@@ -152,7 +154,7 @@ arrow::\link[arrow]{Table} or \link{TableReadIter}
 \if{html}{\out{<a id="method-SOMADataFrame-update"></a>}}
 \if{latex}{\out{\hypertarget{method-SOMADataFrame-update}{}}}
 \subsection{Method \code{update()}}{
-Update (lifecycle: experimental)
+Update (lifecycle: maturing)
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{SOMADataFrame$update(values, row_index_name = NULL)}\if{html}{\out{</div>}}
 }
@@ -188,6 +190,50 @@ Furthermore, \code{values} must contain the same number of rows as the current
 \code{SOMADataFrame}.
 }
 
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-SOMADataFrame-shape"></a>}}
+\if{latex}{\out{\hypertarget{method-SOMADataFrame-shape}{}}}
+\subsection{Method \code{shape()}}{
+Retrieve the shape; as \code{SOMADataFrames} are shapeless,
+simply raises an error
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{SOMADataFrame$shape()}\if{html}{\out{</div>}}
+}
+
+\subsection{Returns}{
+None, instead a \code{\link{.NotYetImplemented}()} error is raised
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-SOMADataFrame-maxshape"></a>}}
+\if{latex}{\out{\hypertarget{method-SOMADataFrame-maxshape}{}}}
+\subsection{Method \code{maxshape()}}{
+Retrieve the maxshape; as \code{SOMADataFrames} are shapeless,
+simply raises an error
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{SOMADataFrame$maxshape()}\if{html}{\out{</div>}}
+}
+
+\subsection{Returns}{
+None, instead a \code{\link{.NotYetImplemented}()} error is raised
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-SOMADataFrame-tiledbsoma_has_upgraded_domain"></a>}}
+\if{latex}{\out{\hypertarget{method-SOMADataFrame-tiledbsoma_has_upgraded_domain}{}}}
+\subsection{Method \code{tiledbsoma_has_upgraded_domain()}}{
+Returns TRUE if the array has the upgraded resizeable domain
+feature from TileDB-SOMA 1.14: the array was created with this support,
+or it has had \code{upgrade_domain} applied to it.
+(lifecycle: maturing)
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{SOMADataFrame$tiledbsoma_has_upgraded_domain()}\if{html}{\out{</div>}}
+}
+
+\subsection{Returns}{
+Logical
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-SOMADataFrame-clone"></a>}}

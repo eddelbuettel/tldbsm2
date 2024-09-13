@@ -25,7 +25,7 @@ SOMASparseNDArrayReadBase <- R6::R6Class(
         for (i in seq_along(private$.coords)) {
           private$.coords[[i]] <- CoordsStrider$new(
             start = 0L,
-            end = shape[i],
+            end = shape[i] - 1L,
             stride = .Machine$integer.max
           )
         }
@@ -121,7 +121,7 @@ SOMASparseNDArrayRead <- R6::R6Class(
   cloneable = FALSE,
   public = list(
 
-    #' @description Read as a sparse matrix (lifecycle: experimental). Returns
+    #' @description Read as a sparse matrix (lifecycle: maturing). Returns
     #' an iterator of Matrix::\link[Matrix]{dgTMatrix-class} or
     #' \link{matrixZeroBasedView} of it.
     #'
@@ -134,7 +134,7 @@ SOMASparseNDArrayRead <- R6::R6Class(
     sparse_matrix = function(zero_based=FALSE) {
       #TODO implement zero_based argument, currently doesn't do anything
 
-        shape <- self$shape
+      shape <- self$shape
       # if (any(private$shape > .Machine$integer.max)) {
       if (any(shape > .Machine$integer.max)) {
         warning(
@@ -147,11 +147,10 @@ SOMASparseNDArrayRead <- R6::R6Class(
         # private$shape <- pmin(private$shape, .Machine$integer.max)
         shape <- pmin(shape, .Machine$integer.max)
       }
-
       SparseReadIter$new(self$sr, shape, zero_based = zero_based)
     },
 
-    #' @description Read as a arrow::\link[arrow]{Table} (lifecycle: experimental).
+    #' @description Read as a arrow::\link[arrow]{Table} (lifecycle: maturing).
     #' Returns an iterator of arrow::\link[arrow]{Table}.
     #'
     #' @return \link{TableReadIter}
@@ -170,7 +169,7 @@ SOMASparseNDArrayRead <- R6::R6Class(
       axis,
       ...,
       size = NULL,
-      reindex_disable_on_axis = NULL
+      reindex_disable_on_axis = NA
     ) {
       return(SOMASparseNDArrayBlockwiseRead$new(
         self$sr,
@@ -210,7 +209,7 @@ SOMASparseNDArrayBlockwiseRead <- R6::R6Class(
       axis,
       ...,
       size,
-      reindex_disable_on_axis = NULL
+      reindex_disable_on_axis = NA
     ) {
       super$initialize(sr, array, coords)
       stopifnot(
@@ -218,6 +217,7 @@ SOMASparseNDArrayBlockwiseRead <- R6::R6Class(
           rlang::is_integerish(size, 1L, finite = TRUE) ||
           (inherits(size, 'integer64') && length(size) == 1L && is.finite(size)),
         "'reindex_disable_on_axis' must be a vector of integers" = is.null(reindex_disable_on_axis) ||
+          is_scalar_logical(reindex_disable_on_axis) ||
           rlang::is_integerish(reindex_disable_on_axis, finite = TRUE) ||
           (inherits(reindex_disable_on_axis, 'integer64') && all(is.finite(reindex_disable_on_axis)))
       )

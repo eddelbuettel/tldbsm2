@@ -1,8 +1,13 @@
 test_that("SOMADenseNDArray creation", {
   skip_if(!extended_tests())
-  uri <- withr::local_tempdir("dense-ndarray")
+  uri <- tempfile(pattern="dense-ndarray")
 
   ndarray <- SOMADenseNDArrayCreate(uri, arrow::int32(), shape = c(10, 5))
+
+  # The array is open for write on create. Nonetheless, close and
+  # reopen to ensure that state needed for a write is available.
+  ndarray$close()
+  ndarray <- SOMADenseNDArrayOpen(uri, "WRITE")
 
   expect_equal(tiledb::tiledb_object_type(uri), "ARRAY")
   expect_equal(ndarray$dimnames(), c("soma_dim_0", "soma_dim_1"))
@@ -21,7 +26,7 @@ test_that("SOMADenseNDArray creation", {
   ndarray <- SOMADenseNDArrayOpen(uri)
   tbl <- ndarray$read_arrow_table(result_order = "COL_MAJOR")
   expect_true(is_arrow_table(tbl))
-  expect_equal(tbl$ColumnNames(), c("soma_dim_0", "soma_dim_1", "soma_data"))
+  expect_equal(tbl$ColumnNames(), c("soma_data"))
 
   expect_identical(
     as.numeric(tbl$GetColumnByName("soma_data")),
@@ -83,14 +88,14 @@ test_that("SOMADenseNDArray creation", {
 
 test_that("platform_config is respected", {
   skip_if(!extended_tests())
-  uri <- withr::local_tempdir("soma-dense-nd-array")
+  uri <- tempfile(pattern="soma-dense-nd-array")
 
   # Set tiledb create options
   cfg <- PlatformConfig$new()
   cfg$set('tiledb', 'create', 'dense_nd_array_dim_zstd_level', 9)
   cfg$set('tiledb', 'create', 'capacity', 8000)
   cfg$set('tiledb', 'create', 'tile_order', 'COL_MAJOR')
-  cfg$set('tiledb', 'create', 'cell_order', 'UNORDERED')
+  cfg$set('tiledb', 'create', 'cell_order', 'ROW_MAJOR')
   cfg$set('tiledb', 'create', 'offsets_filters', list("RLE"))
   cfg$set('tiledb', 'create', 'validity_filters', list("RLE", "NONE"))
   cfg$set('tiledb', 'create', 'dims', list(
@@ -130,7 +135,7 @@ test_that("platform_config is respected", {
 
   expect_equal(tiledb::capacity(tsch), 8000)
   expect_equal(tiledb::tile_order(tsch), "COL_MAJOR")
-  expect_equal(tiledb::cell_order(tsch), "UNORDERED")
+  expect_equal(tiledb::cell_order(tsch), "ROW_MAJOR")
 
   offsets_filters <- tiledb::filter_list(tsch)$offsets
   expect_equal(tiledb::nfilters(offsets_filters), 1)
@@ -184,7 +189,7 @@ test_that("platform_config is respected", {
 
 test_that("platform_config defaults", {
   skip_if(!extended_tests())
-  uri <- withr::local_tempdir("soma-dense-nd-array")
+  uri <- tempfile(pattern="soma-dense-nd-array")
 
   # Set tiledb create options
   cfg <- PlatformConfig$new()
@@ -221,7 +226,7 @@ test_that("platform_config defaults", {
 
 test_that("SOMADenseNDArray timestamped ops", {
   skip_if(!extended_tests())
-  uri <- withr::local_tempdir("soma-dense-nd-array-timestamps")
+  uri <- tempfile(pattern="soma-dense-nd-array-timestamps")
 
   t10 <- Sys.time()
   dnda <- SOMADenseNDArrayCreate(uri=uri, type=arrow::int16(), shape=c(2,2))
@@ -236,6 +241,7 @@ test_that("SOMADenseNDArray timestamped ops", {
 
   t20 <- Sys.time()
   dnda <- SOMADenseNDArrayOpen(uri=uri, mode="WRITE")
+  dnda$set_data_type(arrow::int16())
   M2 <- matrix(rep(1, 4), 2, 2)
   dnda$write(M2)
   dnda$close()

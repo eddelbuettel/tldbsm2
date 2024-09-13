@@ -44,6 +44,11 @@ class ThreadPool;
 using namespace tiledb;
 
 class SOMAContext {
+    // Controls concurrency level for SOMA compute thread pool. Defaults to host
+    // CPU count.
+    inline static const std::string
+        CONFIG_KEY_COMPUTE_CONCURRENCY_LEVEL = "soma.compute_concurrency_level";
+
    public:
     //===================================================================
     //= public non-static
@@ -52,8 +57,8 @@ class SOMAContext {
         : ctx_(std::make_shared<Context>(Config({})))
         , thread_pool_mutex_(){};
 
-    SOMAContext(std::map<std::string, std::string> platform_config)
-        : ctx_(std::make_shared<Context>(Config(platform_config)))
+    SOMAContext(std::map<std::string, std::string> tiledb_config)
+        : ctx_(std::make_shared<Context>(Config(tiledb_config)))
         , thread_pool_mutex_(){};
 
     bool operator==(const SOMAContext& other) const {

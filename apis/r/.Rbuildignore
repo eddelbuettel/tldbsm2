@@ -25,6 +25,7 @@ tiledbsoma.tar.gz
 src/libtiledbsoma/build
 src/libtiledbsoma/test
 src/libtiledbsoma/docs
+src/libtiledbsoma/.editorconfig
 
 # vscode
 ^\.vscode$
@@ -32,3 +33,6 @@ src/libtiledbsoma/docs
 ^data-raw$
 ^doc$
 ^Meta$
+^travis-tool\.sh$
+^run\.sh$
+^travis_wait_.*\.log$

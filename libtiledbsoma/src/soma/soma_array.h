@@ -180,8 +180,7 @@ class SOMAArray : public SOMAObject {
         , arr_(other.arr_)
         , meta_cache_arr_(other.meta_cache_arr_)
         , first_read_next_(other.first_read_next_)
-        , submitted_(other.submitted_)
-        , array_buffer_(other.array_buffer_) {
+        , submitted_(other.submitted_) {
         fill_metadata_cache();
     }
 
@@ -223,6 +222,16 @@ class SOMAArray : public SOMAObject {
         OpenMode mode, std::optional<TimestampRange> timestamp = std::nullopt);
 
     /**
+     * Return a new SOMAArray with the given mode at the current Unix timestamp.
+     *
+     * @param mode if the OpenMode is not given, If the SOMAObject was opened in
+     * READ mode, reopen it in WRITE mode and vice versa
+     * @param timestamp Timestamp
+     */
+    std::unique_ptr<SOMAArray> reopen(
+        OpenMode mode, std::optional<TimestampRange> timestamp = std::nullopt);
+
+    /**
      * Close the SOMAArray object.
      */
     void close();
@@ -236,6 +245,11 @@ class SOMAArray : public SOMAObject {
         return arr_->is_open();
     }
 
+    /**
+     * Get whether the SOMAArray was open in read or write mode.
+     *
+     * @return OpenMode
+     */
     OpenMode mode() const {
         return mq_->query_type() == TILEDB_READ ? OpenMode::read :
                                                   OpenMode::write;
@@ -253,6 +267,20 @@ class SOMAArray : public SOMAObject {
         std::vector<std::string> column_names = {},
         std::string_view batch_size = "auto",
         ResultOrder result_order = ResultOrder::automatic);
+
+    /**
+     * @brief Get the number of dimensions.
+     *
+     * @return uint64_t Number of dimensions.
+     */
+    uint64_t ndim() const;
+
+    /**
+     * @brief Get the name of each dimensions.
+     *
+     * @return std::vector<std::string> Name of each dimensions.
+     */
+    std::vector<std::string> dimension_names() const;
 
     /**
      * @brief Set the dimension slice using one point
@@ -411,12 +439,6 @@ class SOMAArray : public SOMAObject {
      */
     std::optional<std::shared_ptr<ArrayBuffers>> read_next();
 
-    Enumeration extend_enumeration(
-        std::string_view name,
-        uint64_t num_elems,
-        const void* data,
-        uint64_t* offsets);
-
     /**
      * @brief Set the write buffers for a single column.
      *
@@ -432,6 +454,24 @@ class SOMAArray : public SOMAObject {
         uint64_t num_elems,
         const void* data,
         uint64_t* offsets = nullptr,
+        uint8_t* validity = nullptr);
+
+    /**
+     * @brief Set the write buffers for string or binary with 32-bit offsets
+     * (as opposed to large string or large binary with 64-bit offsets).
+     *
+     * @param name Name of the column
+     * @param num_elems Number of elements to write
+     * @param data Pointer to the beginning of the data buffer
+     * @param offsets Pointer to the beginning of the offsets buffer
+     * @param validity Optional pointer to the beginning of the validities
+     * buffer
+     */
+    void set_column_data(
+        std::string_view name,
+        uint64_t num_elems,
+        const void* data,
+        uint32_t* offsets,
         uint8_t* validity = nullptr);
 
     /**
@@ -457,7 +497,16 @@ class SOMAArray : public SOMAObject {
      *   array.write();
      *   array.close();
      */
-    void write();
+    void write(bool sort_coords = true);
+
+    /**
+     * @brief Consolidates and vacuums fragment metadata and commit files.
+     *
+     * @param modes List of modes to apply. By default, apply to fragment_meta
+     * and commits
+     */
+    void consolidate_and_vacuum(
+        std::vector<std::string> modes = {"fragment_meta", "commits"});
 
     /**
      * @brief Check if the query is complete.
@@ -508,13 +557,6 @@ class SOMAArray : public SOMAObject {
     }
 
     /**
-     * @brief Get the total number of unique cells in the array.
-     *
-     * @return uint64_t Total number of unique cells
-     */
-    uint64_t nnz();
-
-    /**
      * @brief Get the TileDB ArraySchema. This should eventually
      * be removed in lieu of arrow_schema below.
      *
@@ -533,66 +575,6 @@ class SOMAArray : public SOMAObject {
         return ArrowAdapter::arrow_schema_from_tiledb_array(
             ctx_->tiledb_ctx(), arr_);
     }
-
-    /**
-     * @brief Get the capacity of each dimension.
-     *
-     * @return A vector with length equal to the number of dimensions; each
-     * value in the vector is the capcity of each dimension.
-     */
-    std::vector<int64_t> shape();
-
-    /**
-     * @brief Get the number of dimensions.
-     *
-     * @return uint64_t Number of dimensions.
-     */
-    uint64_t ndim() const;
-
-    /**
-     * Retrieves the non-empty domain from the array. This is the union of the
-     * non-empty domains of the array fragments.
-     */
-    template <typename T>
-    std::pair<T, T> non_empty_domain(const std::string& name) {
-        try {
-            return arr_->non_empty_domain<T>(name);
-        } catch (const std::exception& e) {
-            throw TileDBSOMAError(e.what());
-        }
-    }
-
-    /**
-     * Retrieves the non-empty domain from the array on the given dimension.
-     * This is the union of the non-empty domains of the array fragments.
-     * Applicable only to var-sized dimensions.
-     */
-    std::pair<std::string, std::string> non_empty_domain_var(
-        const std::string& name) {
-        try {
-            return arr_->non_empty_domain_var(name);
-        } catch (const std::exception& e) {
-            throw TileDBSOMAError(e.what());
-        }
-    }
-
-    /**
-     * Returns the domain of the given dimension.
-     *
-     * @tparam T Domain datatype
-     * @return Pair of [lower, upper] inclusive bounds.
-     */
-    template <typename T>
-    std::pair<T, T> domain(const std::string& name) const {
-        return arr_->schema().domain().dimension(name).domain<T>();
-    }
-
-    /**
-     * @brief Get the name of each dimensions.
-     *
-     * @return std::vector<std::string> Name of each dimensions.
-     */
-    std::vector<std::string> dimension_names() const;
 
     /**
      * @brief Get the mapping of attributes to Enumerations.
@@ -626,6 +608,8 @@ class SOMAArray : public SOMAObject {
      *     same datatype. This argument indicates the number of items in the
      *     value component of the metadata.
      * @param value The metadata value in binary form.
+     * @param force A boolean toggle to suppress internal checks, defaults to
+     *     false.
      *
      * @note The writes will take effect only upon closing the array.
      */
@@ -633,7 +617,8 @@ class SOMAArray : public SOMAObject {
         const std::string& key,
         tiledb_datatype_t value_type,
         uint32_t value_num,
-        const void* value);
+        const void* value,
+        bool force = false);
 
     /**
      * Delete a metadata key-value item from an open array. The array must
@@ -651,12 +636,10 @@ class SOMAArray : public SOMAObject {
     /**
      * @brief Given a key, get the associated value datatype, number of
      * values, and value in binary form. The array must be opened in READ
-     mode,
-     * otherwise the function will error out.
+     * mode, otherwise the function will error out.
      *
      * The value may consist of more than one items of the same datatype.
-     Keys
-     * that do not exist in the metadata will be return NULL for the value.
+     * Keys that do not exist in the metadata will be return NULL for the value.
      *
      * **Example:**
      * @code{.cpp}
@@ -672,8 +655,7 @@ class SOMAArray : public SOMAObject {
      * @endcode
      *
      * @param key The key of the metadata item to be retrieved. UTF-8
-     encodings
-     *     are acceptable.
+     * encodings are acceptable.
      * @return MetadataValue (std::tuple<std::string, tiledb_datatype_t,
      * uint32_t, const void*>)
      */
@@ -716,42 +698,567 @@ class SOMAArray : public SOMAObject {
      */
     std::optional<TimestampRange> timestamp();
 
+    /**
+     * Retrieves the non-empty domain from the array. This is the union of the
+     * non-empty domains of the array fragments.
+     */
+    template <typename T>
+    std::pair<T, T> non_empty_domain_slot(const std::string& name) {
+        try {
+            return arr_->non_empty_domain<T>(name);
+        } catch (const std::exception& e) {
+            throw TileDBSOMAError(e.what());
+        }
+    }
+
+    /**
+     * Retrieves the non-empty domain from the array on the given dimension.
+     * This is the union of the non-empty domains of the array fragments.
+     * Applicable only to var-sized dimensions.
+     */
+    std::pair<std::string, std::string> non_empty_domain_slot_var(
+        const std::string& name) {
+        try {
+            return arr_->non_empty_domain_var(name);
+        } catch (const std::exception& e) {
+            throw TileDBSOMAError(e.what());
+        }
+    }
+
+    /**
+     * Exposed for testing purposes.
+     */
+    CurrentDomain get_current_domain() const {
+        return _get_current_domain();
+    }
+
+    /**
+     * @brief Returns true if the array has a non-empty current domain, else
+     * false.  Note that at the core level it's "current domain" for all arrays;
+     * at the SOMA-API level it's "upgraded_shape" for SOMASparseNDArray and
+     * SOMADenseNDArray, and "upgraded_domain" for SOMADataFrame; here
+     * we use the core language and defer to Python/R to conform to
+     * SOMA-API syntax.
+     */
+    bool has_current_domain() const {
+        return !_get_current_domain().is_empty();
+    }
+
+    /**
+     * Returns the SOMA domain at the given dimension.
+     *
+     * o For arrays with core current-domain support:
+     *   - soma domain is core current domain
+     * o For arrays without core current-domain support:
+     *   - soma domain is core domain
+     */
+    template <typename T>
+    std::pair<T, T> soma_domain_slot(const std::string& name) const {
+        if (has_current_domain()) {
+            return core_current_domain_slot<T>(name);
+        } else {
+            return core_domain_slot<T>(name);
+        }
+    }
+
+    /**
+     * Returns the SOMA maxdomain at the given dimension.
+     *
+     * o For arrays with core current-domain support:
+     *   - soma maxdomain is core domain
+     * o For arrays without core current-domain support:
+     *   - soma maxdomain is core domain
+     */
+    template <typename T>
+    std::pair<T, T> soma_maxdomain_slot(const std::string& name) const {
+        return core_domain_slot<T>(name);
+    }
+
+    /**
+     * Returns the core current domain at the given dimension.
+     *
+     * o For arrays with core current-domain support:
+     *   - soma domain is core current domain
+     *   - soma maxdomain is core domain
+     * o For arrays without core current-domain support:
+     *   - soma domain is core domain
+     *   - soma maxdomain is core domain
+     *   - core current domain is not accessed at the soma level
+     *
+     * @tparam T Domain datatype
+     * @return Pair of [lower, upper] inclusive bounds.
+     */
+    template <typename T>
+    std::pair<T, T> core_current_domain_slot(const std::string& name) const {
+        CurrentDomain current_domain = _get_current_domain();
+        if (current_domain.is_empty()) {
+            throw TileDBSOMAError(
+                "core_current_domain_slot: internal coding error");
+        }
+        if (current_domain.type() != TILEDB_NDRECTANGLE) {
+            throw TileDBSOMAError(
+                "core_current_domain_slot: found non-rectangle type");
+        }
+        NDRectangle ndrect = current_domain.ndrectangle();
+
+        // Convert from two-element array (core API) to pair (tiledbsoma API)
+        std::array<T, 2> arr = ndrect.range<T>(name);
+        return std::pair<T, T>(arr[0], arr[1]);
+    }
+
+    /**
+     * Returns the core current domain at the given dimension.
+     *
+     * o For arrays with core current-domain support:
+     *   - soma domain is core current domain
+     *   - soma maxdomain is core domain
+     * o For arrays without core current-domain support:
+     *   - soma domain is core domain
+     *   - soma maxdomain is core domain
+     *   - core current domain is not accessed at the soma level
+     *
+     * @tparam T Domain datatype
+     * @return Pair of [lower, upper] inclusive bounds.
+     */
+    template <typename T>
+    std::pair<T, T> core_domain_slot(const std::string& name) const {
+        return arr_->schema().domain().dimension(name).domain<T>();
+    }
+
+    /**
+     * @brief Get the total number of unique cells in the array.
+     *
+     * @return uint64_t Total number of unique cells
+     */
+    uint64_t nnz();
+
+    /**
+     * @brief Get the current capacity of each dimension.
+     *
+     * This applies to arrays all of whose dims are of type int64_t: this
+     * includes SOMASparseNDArray and SOMADenseNDArray, and default-indexed
+     * SOMADataFrame.
+     *
+     * At the TileDB-SOMA level we call this "shape". At the TileDB Core
+     * storage level this maps to "current domain".
+     *
+     * Further, we map this single n to the pair (0, n-1) since core permits a
+     * doubly inclusive pair (lo, hi) on each dimension slot.
+     *
+     * @return A vector with length equal to the number of dimensions; each
+     * value in the vector is the capacity of each dimension.
+     */
+    std::vector<int64_t> shape();
+
+    /**
+     * @brief Get the maximum resizable capacity of each dimension.
+     *
+     * This applies to arrays all of whose dims are of type int64_t: this
+     * includes SOMASparseNDArray and SOMADenseNDArray, and default-indexed
+     * SOMADataFrame.
+     *
+     * At the TileDB-SOMA level we call this "maxshape". At the TileDB Core
+     * storage level this maps to "domain".
+     *
+     * Further, we map this single n to the pair (0, n-1) since core permits a
+     * doubly inclusive pair (lo, hi) on each dimension slot.
+     *
+     * @return A vector with length equal to the number of dimensions; each
+     * value in the vector is the maximum capacity of each dimension.
+     */
+    std::vector<int64_t> maxshape();
+
+    /**
+     * @brief Resize the shape (what core calls "current domain") up to the
+     * maxshape (what core calls "domain").
+     *
+     * This applies to arrays all of whose dims are of type int64_t: this
+     * includes SOMASparseNDArray and SOMADenseNDArray, and default-indexed
+     * SOMADataFrame.
+     *
+     * @return Nothing. Raises an exception if the resize would be a downsize,
+     * which is not supported.
+     */
+    void resize(const std::vector<int64_t>& newshape);
+
+    /**
+     * @brief Given an old-style array without current domain, sets its
+     * current domain. This is applicable only to arrays having all dims
+     * of int64 type. Namely, all SparseNDArray/DenseNDArray, and
+     * default-indexed DataFrame.
+     */
+    void upgrade_shape(const std::vector<int64_t>& newshape);
+
+    /**
+     * @brief Increases the tiledbsoma shape up to at most the maxshape,
+     * resizing the soma_joinid dimension if it is a dimension.
+     *
+     * While SOMA SparseNDArray and DenseNDArray, along with default-indexed
+     * DataFrame, have int64_t dims, non-default-indexed DataFrame objects need
+     * not: it is only required that they have a dim _or_ an attr called
+     * soma_joinid. If soma_joinid is one of the dims, it will be resized while
+     * the others will be preserved. If soma_joinid is not one of the dims,
+     * nothing will be changed, as nothing _needs_ to be changed.
+     *
+     * @return Throws if the requested shape exceeds the array's create-time
+     * maxshape. Throws if the array does not have current-domain support.
+     */
+    void maybe_resize_soma_joinid(const std::vector<int64_t>& newshape);
+
+   protected:
+    // These two are for use nominally by SOMADataFrame. This could be moved in
+    // its entirety to SOMADataFrame, but it would entail moving several
+    // SOMAArray attributes from private to protected, which has knock-on
+    // effects on the order of constructor initializers, etc.: in total it's
+    // simplest to place this here and have SOMADataFrame invoke it.
+    //
+    // They return the shape and maxshape slots for the soma_joinid dim, if
+    // the array has one. These are important test-points and dev-internal
+    // access-points, in particular, for the tiledbsoma-io experiment-level
+    // resizer.
+    std::optional<int64_t> _maybe_soma_joinid_shape();
+    std::optional<int64_t> _maybe_soma_joinid_maxshape();
+
    private:
     //===================================================================
     //= private non-static
     //===================================================================
 
-    template <typename T>
-    Enumeration _extend_value_helper(
-        T* data, uint64_t num_elems, Enumeration enmr, uint64_t max_capacity) {
-        std::vector<T> enums_in_write((T*)data, (T*)data + num_elems);
-        auto enums_existing = enmr.as_vector<T>();
-        std::vector<T> extend_values;
-        for (auto enum_val : enums_in_write) {
-            if (std::find(
-                    enums_existing.begin(), enums_existing.end(), enum_val) ==
-                enums_existing.end()) {
-                extend_values.push_back(enum_val);
-            }
-        }
+    uint64_t _get_max_capacity(tiledb_datatype_t index_type);
 
-        if (extend_values.size() != 0) {
-            auto free_capacity = max_capacity - enums_existing.size();
-            if (free_capacity < extend_values.size()) {
-                throw TileDBSOMAError(
-                    "Cannot extend enumeration; reached maximum capacity");
-            }
-            ArraySchemaEvolution se(*ctx_->tiledb_ctx());
-            se.extend_enumeration(enmr.extend(extend_values));
-            se.array_evolve(uri_);
-            return enmr.extend(extend_values);
-        }
+    /**
+     * Convenience function for creating an ArraySchemaEvolution object
+     * referencing this array's context pointer, along with its open-at
+     * timestamp (if any).
+     */
+    ArraySchemaEvolution _make_se();
 
-        return enmr;
+    /**
+     * The caller must check the return value for .is_empty() to see if this is
+     * a new-style array with current-domain support (.is_empty() is false) , or
+     * an old-style array without current-domain support (.is_empty() is true).
+     * We could implement this as a std::optional<CurrentDomain> return value
+     * here, but, that would be a redundant indicator.
+     */
+    CurrentDomain _get_current_domain() const {
+        return tiledb::ArraySchemaExperimental::current_domain(
+            *ctx_->tiledb_ctx(), arr_->schema());
     }
+
+    /**
+     * Helper method for resize and upgrade_shape.
+     */
+    void _set_current_domain_from_shape(const std::vector<int64_t>& newshape);
+
+    /**
+     * While SparseNDArray, DenseNDArray, and default-indexed DataFrame
+     * have int64 dims, variant-indexed DataFrames do not. This helper
+     * lets us pre-check any attempts to treat dims as if they were int64.
+     */
+    bool _dims_are_int64();
+
+    /**
+     * Same, but throws.
+     */
+    void _check_dims_are_int64();
+
+    /**
+     * With old shape: core domain mapped to tiledbsoma shape; core current
+     * domain did not exist.
+     *
+     * With new shape: core domain maps to tiledbsoma maxshape;
+     * core current_domain maps to tiledbsoma shape.
+     *
+     * Here we distinguish between user-side API, and core-side implementation.
+     */
+    std::vector<int64_t> _tiledb_domain();
+    std::vector<int64_t> _tiledb_current_domain();
+    std::optional<int64_t> _maybe_soma_joinid_tiledb_current_domain();
+    std::optional<int64_t> _maybe_soma_joinid_tiledb_domain();
+
+    bool _extend_enumeration(
+        ArrowSchema* value_schema,
+        ArrowArray* value_array,
+        ArrowSchema* index_schema,
+        ArrowArray* index_array,
+        ArraySchemaEvolution se);
+
+    template <typename ValueType>
+    bool _extend_and_evolve_schema(
+        ArrowSchema* value_schema,
+        ArrowArray* value_array,
+        ArrowSchema* index_schema,
+        ArrowArray* index_array,
+        ArraySchemaEvolution se);
+
+    bool _create_and_cast_column(
+        ArrowSchema* orig_column_schema,
+        ArrowArray* orig_column_array,
+        ArrowSchema* new_column_schema,
+        ArrowArray* new_column_array,
+        ArraySchemaEvolution se);
+
+    void _create_column(
+        ArrowSchema* orig_column_schema,
+        ArrowArray* orig_column_array,
+        ArrowSchema* new_column_schema,
+        ArrowArray* new_column_array);
+
+    void _cast_column(
+        ArrowSchema* orig_column_schema,
+        ArrowArray* orig_column_array,
+        ArrowSchema* new_column_schema,
+        ArrowArray* new_column_array);
+
+    template <typename UserType>
+    void _cast_column_aux(
+        ArrowSchema* orig_column_schema,
+        ArrowArray* orig_column_array,
+        ArrowSchema* new_column_schema,
+        ArrowArray* new_column_array);
+
+    template <typename UserType, typename DiskType>
+    void _copy_column(
+        ArrowArray* orig_column_array, ArrowArray* new_column_array) {
+        UserType* buf;
+        if (orig_column_array->n_buffers == 3) {
+            buf = (UserType*)orig_column_array->buffers[2] +
+                  orig_column_array->offset;
+        } else {
+            buf = (UserType*)orig_column_array->buffers[1] +
+                  orig_column_array->offset;
+        }
+        std::vector<UserType> original_values(
+            buf, buf + orig_column_array->length);
+        std::vector<DiskType> casted_values;
+        for (auto val : original_values) {
+            casted_values.push_back(val);
+        }
+
+        new_column_array->buffers[0] = orig_column_array->buffers[0];
+
+        if (orig_column_array->n_buffers == 3) {
+            new_column_array->buffers[2] = malloc(
+                sizeof(DiskType) * casted_values.size());
+            std::memcpy(
+                (void*)new_column_array->buffers[2],
+                casted_values.data(),
+                sizeof(DiskType) * casted_values.size());
+        } else {
+            new_column_array->buffers[1] = malloc(
+                sizeof(DiskType) * casted_values.size());
+            std::memcpy(
+                (void*)new_column_array->buffers[1],
+                casted_values.data(),
+                sizeof(DiskType) * casted_values.size());
+        }
+    }
+
+    template <typename ValueType>
+    void _remap_indexes(
+        std::string column_name,
+        Enumeration extended_enmr,
+        std::vector<ValueType> enums_in_write,
+        ArrowSchema* index_schema,
+        ArrowArray* index_array) {
+        auto user_index_type = ArrowAdapter::to_tiledb_format(
+            index_schema->format);
+        switch (user_index_type) {
+            case TILEDB_INT8:
+                SOMAArray::_remap_indexes_aux<ValueType, int8_t>(
+                    column_name, extended_enmr, enums_in_write, index_array);
+                break;
+            case TILEDB_UINT8:
+                SOMAArray::_remap_indexes_aux<ValueType, uint8_t>(
+                    column_name, extended_enmr, enums_in_write, index_array);
+                break;
+            case TILEDB_INT16:
+                SOMAArray::_remap_indexes_aux<ValueType, int16_t>(
+                    column_name, extended_enmr, enums_in_write, index_array);
+                break;
+            case TILEDB_UINT16:
+                SOMAArray::_remap_indexes_aux<ValueType, uint16_t>(
+                    column_name, extended_enmr, enums_in_write, index_array);
+                break;
+            case TILEDB_INT32:
+                SOMAArray::_remap_indexes_aux<ValueType, int32_t>(
+                    column_name, extended_enmr, enums_in_write, index_array);
+                break;
+            case TILEDB_UINT32:
+                SOMAArray::_remap_indexes_aux<ValueType, uint32_t>(
+                    column_name, extended_enmr, enums_in_write, index_array);
+                break;
+            case TILEDB_INT64:
+                SOMAArray::_remap_indexes_aux<ValueType, int64_t>(
+                    column_name, extended_enmr, enums_in_write, index_array);
+                break;
+            case TILEDB_UINT64:
+                SOMAArray::_remap_indexes_aux<ValueType, uint64_t>(
+                    column_name, extended_enmr, enums_in_write, index_array);
+                break;
+            default:
+                throw TileDBSOMAError(
+                    "Saw invalid enumeration index type when trying to extend"
+                    "enumeration");
+        }
+    }
+
+    template <typename ValueType, typename IndexType>
+    void _remap_indexes_aux(
+        std::string column_name,
+        Enumeration extended_enmr,
+        std::vector<ValueType> enums_in_write,
+        ArrowArray* index_array) {
+        IndexType* idxbuf;
+        if (index_array->n_buffers == 3) {
+            idxbuf = (IndexType*)index_array->buffers[2];
+        } else {
+            idxbuf = (IndexType*)index_array->buffers[1];
+        }
+
+        auto enmr_vec = extended_enmr.as_vector<ValueType>();
+        auto beg = enmr_vec.begin();
+        auto end = enmr_vec.end();
+        std::vector<IndexType> original_indexes(
+            idxbuf, idxbuf + index_array->length);
+        std::vector<IndexType> shifted_indexes;
+        for (auto i : original_indexes) {
+            // For nullable columns, when the value is NULL, the associated
+            // index may be a negative integer, so do not index into
+            // enums_in_write or it will segfault
+            if (0 > i) {
+                shifted_indexes.push_back(i);
+            } else {
+                auto it = std::find(beg, end, enums_in_write[i]);
+                shifted_indexes.push_back(it - beg);
+            }
+        }
+
+        auto attr = tiledb_schema()->attribute(column_name);
+        switch (attr.type()) {
+            case TILEDB_INT8:
+                return SOMAArray::_cast_shifted_indexes<IndexType, int8_t>(
+                    shifted_indexes, index_array);
+            case TILEDB_UINT8:
+                return SOMAArray::_cast_shifted_indexes<IndexType, uint8_t>(
+                    shifted_indexes, index_array);
+            case TILEDB_INT16:
+                return SOMAArray::_cast_shifted_indexes<IndexType, int16_t>(
+                    shifted_indexes, index_array);
+            case TILEDB_UINT16:
+                return SOMAArray::_cast_shifted_indexes<IndexType, uint16_t>(
+                    shifted_indexes, index_array);
+            case TILEDB_INT32:
+                return SOMAArray::_cast_shifted_indexes<IndexType, int32_t>(
+                    shifted_indexes, index_array);
+            case TILEDB_UINT32:
+                return SOMAArray::_cast_shifted_indexes<IndexType, uint32_t>(
+                    shifted_indexes, index_array);
+            case TILEDB_INT64:
+                return SOMAArray::_cast_shifted_indexes<IndexType, int64_t>(
+                    shifted_indexes, index_array);
+            case TILEDB_UINT64:
+                return SOMAArray::_cast_shifted_indexes<IndexType, uint64_t>(
+                    shifted_indexes, index_array);
+            default:
+                throw TileDBSOMAError(
+                    "Saw invalid enumeration index type when trying to extend"
+                    "enumeration");
+        }
+    }
+
+    template <typename UserIndexType, typename DiskIndexType>
+    void _cast_shifted_indexes(
+        std::vector<UserIndexType> shifted_indexes, ArrowArray* index_array) {
+        std::vector<DiskIndexType> casted_indexes;
+        for (auto i : shifted_indexes) {
+            casted_indexes.push_back(i);
+        }
+
+        if (index_array->n_buffers == 3) {
+            index_array->buffers[2] = malloc(
+                sizeof(DiskIndexType) * casted_indexes.size());
+            std::memcpy(
+                (void*)index_array->buffers[2],
+                casted_indexes.data(),
+                sizeof(DiskIndexType) * casted_indexes.size());
+        } else {
+            index_array->buffers[1] = malloc(
+                sizeof(DiskIndexType) * casted_indexes.size());
+            std::memcpy(
+                (void*)index_array->buffers[1],
+                casted_indexes.data(),
+                sizeof(DiskIndexType) * casted_indexes.size());
+        }
+    }
+
+    void _promote_indexes_to_values(
+        ArrowSchema* orig_column_schema,
+        ArrowArray* orig_column_array,
+        ArrowArray* new_column_array);
+
+    template <typename T>
+    void _cast_dictionary_values(
+        ArrowSchema* orig_column_schema,
+        ArrowArray* orig_column_array,
+        ArrowArray* new_column_array);
+
+    std::vector<int64_t> _get_index_vector(
+        ArrowSchema* orig_column_schema, ArrowArray* orig_column_array) {
+        auto index_type = ArrowAdapter::to_tiledb_format(
+            orig_column_schema->format);
+        auto len = orig_column_array->length;
+
+        switch (index_type) {
+            case TILEDB_INT8: {
+                int8_t* idxbuf = (int8_t*)orig_column_array->buffers[1];
+                return std::vector<int64_t>(idxbuf, idxbuf + len);
+            }
+            case TILEDB_UINT8: {
+                uint8_t* idxbuf = (uint8_t*)orig_column_array->buffers[1];
+                return std::vector<int64_t>(idxbuf, idxbuf + len);
+            }
+            case TILEDB_INT16: {
+                int16_t* idxbuf = (int16_t*)orig_column_array->buffers[1];
+                return std::vector<int64_t>(idxbuf, idxbuf + len);
+            }
+            case TILEDB_UINT16: {
+                uint16_t* idxbuf = (uint16_t*)orig_column_array->buffers[1];
+                return std::vector<int64_t>(idxbuf, idxbuf + len);
+            }
+            case TILEDB_INT32: {
+                int32_t* idxbuf = (int32_t*)orig_column_array->buffers[1];
+                return std::vector<int64_t>(idxbuf, idxbuf + len);
+            }
+            case TILEDB_UINT32: {
+                uint32_t* idxbuf = (uint32_t*)orig_column_array->buffers[1];
+                return std::vector<int64_t>(idxbuf, idxbuf + len);
+            }
+            case TILEDB_INT64: {
+                int64_t* idxbuf = (int64_t*)orig_column_array->buffers[1];
+                return std::vector<int64_t>(idxbuf, idxbuf + len);
+            }
+            case TILEDB_UINT64: {
+                uint64_t* idxbuf = (uint64_t*)orig_column_array->buffers[1];
+                return std::vector<int64_t>(idxbuf, idxbuf + len);
+            }
+            default:
+                throw TileDBSOMAError(
+                    "Saw invalid index type when trying to promote indexes to "
+                    "values");
+        }
+    }
+
+    // Helper function to cast Boolean of bits (Arrow) to uint8 (TileDB)
+    void _cast_bit_to_uint8(ArrowSchema* arrow_schema, ArrowArray* arrow_array);
 
     // Fills the metadata cache upon opening the array.
     void fill_metadata_cache();
+
+    // Helper function for set_array_data
+    ArrowTable _cast_table(
+        std::unique_ptr<ArrowSchema> arrow_schema,
+        std::unique_ptr<ArrowArray> arrow_array);
 
     // SOMAArray URI
     std::string uri_;
@@ -780,9 +1287,10 @@ class SOMAArray : public SOMAObject {
     // Array associated with mq_
     std::shared_ptr<Array> arr_;
 
-    // Array associated with metadata_. Metadata values need to be accessible in
-    // write mode as well. We need to keep this read-mode array alive in order
-    // for the metadata value pointers in the cache to be accessible
+    // Array associated with metadata_. Metadata values need to be
+    // accessible in write mode as well. We need to keep this read-mode
+    // array alive in order for the metadata value pointers in the cache to
+    // be accessible
     std::shared_ptr<Array> meta_cache_arr_;
 
     // True if this is the first call to read_next()
@@ -792,11 +1300,42 @@ class SOMAArray : public SOMAObject {
     bool submitted_ = false;
 
     // Unoptimized method for computing nnz() (issue `count_cells` query)
-    uint64_t nnz_slow();
-
-    // ArrayBuffers to hold ColumnBuffers alive when submitting to write query
-    std::shared_ptr<ArrayBuffers> array_buffer_ = nullptr;
+    uint64_t _nnz_slow();
 };
+
+template <>
+bool SOMAArray::_extend_and_evolve_schema<std::string>(
+    ArrowSchema* value_schema,
+    ArrowArray* value_array,
+    ArrowSchema* index_schema,
+    ArrowArray* index_array,
+    ArraySchemaEvolution se);
+
+template <>
+void SOMAArray::_cast_dictionary_values<std::string>(
+    ArrowSchema* orig_column_schema,
+    ArrowArray* orig_column_array,
+    ArrowArray* new_column_array);
+
+template <>
+void SOMAArray::_cast_dictionary_values<bool>(
+    ArrowSchema* orig_column_schema,
+    ArrowArray* orig_column_array,
+    ArrowArray* new_column_array);
+
+template <>
+void SOMAArray::_cast_column_aux<std::string>(
+    ArrowSchema* orig_column_schema,
+    ArrowArray* orig_column_array,
+    ArrowSchema* new_column_schema,
+    ArrowArray* new_column_array);
+
+template <>
+void SOMAArray::_cast_column_aux<bool>(
+    ArrowSchema* orig_column_schema,
+    ArrowArray* orig_column_array,
+    ArrowSchema* new_column_schema,
+    ArrowArray* new_column_array);
 
 }  // namespace tiledbsoma
 

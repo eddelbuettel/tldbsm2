@@ -1,9 +1,8 @@
 
 test_that("write_soma.data.frame mechanics", {
   skip_if(!extended_tests())
-  skip_if_not_installed('datasets')
 
-  uri <- withr::local_tempdir("write-soma-data-frame")
+  uri <- tempfile(pattern="write-soma-data-frame")
   collection <- SOMACollectionCreate(uri)
 
   co2 <- get_data('CO2', package = 'datasets')
@@ -13,7 +12,7 @@ test_that("write_soma.data.frame mechanics", {
   expect_identical(sdf$uri, file.path(collection$uri, 'co2'))
   expect_identical(sdf$dimnames(), 'soma_joinid')
   expect_identical(sdf$attrnames(), c(names(co2), 'obs_id'))
-  expect_true(rlang::is_na(sdf$shape()))
+  expect_error(sdf$shape(), class = 'notYetImplementedError')
   schema <- sdf$schema()
   expect_s3_class(schema, 'Schema')
   expect_equal(schema$num_fields - 2L, ncol(co2))
@@ -23,13 +22,13 @@ test_that("write_soma.data.frame mechanics", {
   )
 
   collection$close()
+
 })
 
 test_that("write_soma.data.frame enumerations", {
   skip_if(!extended_tests())
-  skip_if_not_installed('datasets')
 
-  uri <- withr::local_tempdir("write-soma-data-frame-enumerations")
+  uri <- tempfile(pattern="write-soma-data-frame-enumerations")
   collection <- SOMACollectionCreate(uri)
   on.exit(collection$close(), add = TRUE)
 
@@ -67,9 +66,8 @@ test_that("write_soma.data.frame enumerations", {
 
 test_that("write_soma.data.frame no enumerations", {
   skip_if(!extended_tests())
-  skip_if_not_installed('datasets')
 
-  uri <- withr::local_tempdir("write-soma-data-frame-factorless")
+  uri <- tempfile(pattern="write-soma-data-frame-factorless")
   collection <- SOMACollectionCreate(uri)
   on.exit(collection$close(), add = TRUE)
 
@@ -114,9 +112,8 @@ test_that("write_soma.data.frame no enumerations", {
 
 test_that("write_soma.data.frame registration", {
   skip_if(!extended_tests())
-  skip_if_not_installed("datasets")
 
-  uri <- withr::local_tempdir("write-soma-data-frame-registration")
+  uri <- tempfile(pattern="write-soma-data-frame-registration")
   collection <- SOMACollectionCreate(uri)
   on.exit(collection$close(), add = TRUE)
 
@@ -155,9 +152,8 @@ test_that("write_soma.data.frame registration", {
 
 test_that("write_soma dense matrix mechanics", {
   skip_if(!extended_tests())
-  skip_if_not_installed('datasets')
 
-  uri <- withr::local_tempdir("write-soma-dense-matrix")
+  uri <- tempfile(pattern="write-soma-dense-matrix")
   collection <- SOMACollectionCreate(uri)
 
   state77 <- get(x = 'state.x77', envir = getNamespace('datasets'))
@@ -212,9 +208,8 @@ test_that("write_soma dense matrix mechanics", {
 
 test_that("write_soma dense matrix registration", {
   skip_if(!extended_tests())
-  skip_if_not_installed("datasets")
 
-  uri <- withr::local_tempdir("write-soma-dense-matrix-registration")
+  uri <- tempfile(pattern="write-soma-dense-matrix-registration")
   collection <- SOMACollectionCreate(uri)
   on.exit(collection$close(), add = TRUE)
 
@@ -253,7 +248,7 @@ test_that("write_soma dense matrix registration", {
 
 test_that("write_soma sparse matrix mechanics", {
   skip_if(!extended_tests())
-  uri <- withr::local_tempdir("write-soma-sparse-matrix")
+  uri <- tempfile(pattern="write-soma-sparse-matrix")
   collection <- SOMACollectionCreate(uri)
   knex <- get_data('KNex', package = 'Matrix')$mm
   expect_no_condition(smat <- write_soma(knex, uri = 'knex', soma = collection))
@@ -279,7 +274,6 @@ test_that("write_soma sparse matrix mechanics", {
   expect_identical(tmat$attrnames(), 'soma_data')
   expect_equal(tmat$shape(), rev(dim(knex)))
   # Try a dense matrix
-  skip_if_not_installed('datasets')
   state77 <- get(x = 'state.x77', envir = getNamespace('datasets'))
   expect_no_condition(cmat <- write_soma(state77, 'state77s', soma = collection))
   expect_s3_class(cmat, 'SOMASparseNDArray')
@@ -295,9 +289,8 @@ test_that("write_soma sparse matrix mechanics", {
 
 test_that("write_soma sparse matrix registration", {
   skip_if(!extended_tests())
-  skip_if_not_installed("datasets")
 
-  uri <- withr::local_tempdir("write-sparse-dense-matrix-registration")
+  uri <- tempfile(pattern="write-sparse-dense-matrix-registration")
   collection <- SOMACollectionCreate(uri)
   on.exit(collection$close(), add = TRUE)
 
@@ -334,9 +327,8 @@ test_that("write_soma sparse matrix registration", {
 
 test_that("write_soma.character mechanics", {
   skip_if(!extended_tests())
-  skip_if_not_installed("datasets")
 
-  uri <- withr::local_tempdir("write-soma-character")
+  uri <- tempfile(pattern="write-soma-character")
   collection <- SOMACollectionCreate(uri)
   on.exit(collection$close(), add = TRUE)
 
@@ -362,9 +354,8 @@ test_that("write_soma.character mechanics", {
 
 test_that("write_soma.character scalar", {
   skip_if(!extended_tests())
-  skip_if_not_installed("datasets")
 
-  uri <- withr::local_tempdir("write-soma-character-scalar")
+  uri <- tempfile(pattern="write-soma-character-scalar")
   collection <- SOMACollectionCreate(uri)
   on.exit(collection$close(), add = TRUE)
 
@@ -388,4 +379,41 @@ test_that("write_soma.character scalar", {
   expect_identical(tbl$soma_joinid$as_vector(), 0L)
   expect_identical(sdf.cars <- tbl$values$as_vector(), cars)
   expect_length(unlist(strsplit(sdf.cars, ",")), nrow(mtcars))
+})
+
+test_that("get_{some,tiledb}_object_type", {
+    suppressMessages({
+        library(SeuratObject)
+        library(tiledbsoma)
+    })
+
+    ## write out a SOMA
+    data("pbmc_small")
+    uri <- tempfile()
+    expect_equal(write_soma(pbmc_small, uri = uri), uri)  # uri return is success
+
+    # SOMA
+    expect_equal(tiledbsoma:::get_soma_object_type(uri, soma_context()), "SOMAExperiment")
+    expect_equal(tiledbsoma:::get_soma_object_type(file.path(uri, "ms/RNA"), soma_context()), "SOMAMeasurement")
+    coll <- c("ms", "ms/RNA/obsm", "ms/RNA/obsp/", "ms/RNA/varm")
+    for (co in coll) {
+        expect_equal(tiledbsoma:::get_soma_object_type(file.path(uri, co), soma_context()), "SOMACollection")
+    }
+    expect_equal(tiledbsoma:::get_soma_object_type(file.path(uri, "ms/RNA/var"), soma_context()), "SOMADataFrame")
+    sparr <- c("ms/RNA/obsm/X_pca", "ms/RNA/obsm/X_tsne", "ms/RNA/obsp/RNA_snn")
+    for (a in sparr) {
+        expect_equal(tiledbsoma:::get_soma_object_type(file.path(uri, a), soma_context()), "SOMASparseNDArray")
+    }
+    expect_error(tiledbsoma:::get_some_object_type("doesnotexit", soma_context()))
+
+    ## TileDB
+    grps <- c("", "ms", "ms/RNA", "ms/RNA/obsm", "ms/RNA/obsp/", "ms/RNA/varm")
+    for (g in grps) {
+        expect_equal(tiledbsoma:::get_tiledb_object_type(file.path(uri, g), soma_context()), "GROUP")
+    }
+    arrs <- c("ms/RNA/obsm/X_pca", "ms/RNA/obsm/X_tsne", "ms/RNA/obsp/RNA_snn", "ms/RNA/var")
+    for (a in arrs) {
+        expect_equal(tiledbsoma:::get_tiledb_object_type(file.path(uri, a), soma_context()), "ARRAY")
+    }
+    expect_equal(tiledbsoma:::get_tiledb_object_type("doesnotexit", soma_context()), "INVALID")
 })

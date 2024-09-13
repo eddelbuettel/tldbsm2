@@ -16,7 +16,7 @@
 #' ## Duplicate writes
 #'
 #' As duplicate index values are not allowed, index values already present in
-#' the object are overwritten and new index values are added. (lifecycle: experimental)
+#' the object are overwritten and new index values are added. (lifecycle: maturing)
 #'
 #' @export
 SOMASparseNDArray <- R6::R6Class(
@@ -47,17 +47,17 @@ SOMASparseNDArray <- R6::R6Class(
       }
 
       cfg <- as.character(tiledb::config(self$tiledbsoma_ctx$context()))
-      rl <- sr_setup(uri = self$uri,
-                     config = cfg,
+      sr <- sr_setup(uri = self$uri,
+                     config = cfg, # needed ?
+                     private$.soma_context,
                      dim_points = coords,
                      result_order = result_order,
-                     timestamp_end = private$tiledb_timestamp,
+                     timestamprange = self$.tiledb_timestamp_range,
                      loglevel = log_level)
-      private$ctx_ptr <- rl$ctx
-      SOMASparseNDArrayRead$new(rl$sr, self, coords)
+      SOMASparseNDArrayRead$new(sr, self, coords)
     },
 
-    #' @description Write matrix-like data to the array. (lifecycle: experimental)
+    #' @description Write matrix-like data to the array. (lifecycle: maturing)
     #'
     #' @param values Any `matrix`-like object coercible to a
     #' [`TsparseMatrix`][`Matrix::TsparseMatrix-class`]. Character dimension
@@ -175,18 +175,56 @@ SOMASparseNDArray <- R6::R6Class(
         index <- index + 2L
       }
       self$set_metadata(bbox_flat)
+      spdl::debug(
+        "[SOMASparseNDArray$write] Calling .write_coo_df ({})",
+        self$tiledb_timestamp %||% "now"
+      )
+
       private$.write_coo_dataframe(coo)
 
-      # tiledb-r always closes the array after a write operation so we need to
-      # manually reopen it until close-on-write is optional
-      self$open("WRITE", internal_use_only = "allowed_use")
       invisible(self)
     },
 
-    #' @description Retrieve number of non-zero elements (lifecycle: experimental)
+    #' @description Retrieve number of non-zero elements (lifecycle: maturing)
     #' @return A scalar with the number of non-zero elements
     nnz = function() {
       nnz(self$uri, config=as.character(tiledb::config(self$tiledbsoma_ctx$context())))
+    },
+
+    #' @description Increases the shape of the array as specfied. Raises an error
+    #' if the new shape is less than the current shape in any dimension. Raises
+    #' an error if the new shape exceeds maxshape in any dimension. Raises an
+    #' error if the array doesn't already have a shape: in that case please call
+    #' tiledbsoma_upgrade_shape.
+    #' @param new_shape A vector of integerish, of the same length as the array's `ndim`.
+    #' @return No return value
+    resize = function(new_shape) {
+      # TODO: move this to SOMANDArrayBase.R once core offers current-domain support for dense arrays.
+      # https://github.com/single-cell-data/TileDB-SOMA/issues/2955
+
+      stopifnot("'new_shape' must be a vector of integerish values, of the same length as maxshape" = rlang::is_integerish(new_shape, n = self$ndim()) ||
+        (bit64::is.integer64(new_shape) && length(new_shape) == self$ndim())
+      )
+      # Checking slotwise new shape >= old shape, and <= max_shape, is already done in libtiledbsoma
+
+      resize(self$uri, new_shape, config=as.character(tiledb::config(self$tiledbsoma_ctx$context())))
+    },
+
+    #' @description Allows the array to have a resizeable shape as described in the
+    #' TileDB-SOMA 1.15 release notes.  Raises an error if the shape exceeds maxshape in any
+    #' dimension. Raises an error if the array already has a shape.
+    #' @param shape A vector of integerish, of the same length as the array's `ndim`.
+    #' @return No return value
+    tiledbsoma_upgrade_shape = function(shape) {
+      # TODO: move this to SOMANDArrayBase.R once core offers current-domain support for dense arrays.
+      # https://github.com/single-cell-data/TileDB-SOMA/issues/2955
+
+      stopifnot("'shape' must be a vector of integerish values, of the same length as maxshape" = rlang::is_integerish(shape, n = self$ndim()) ||
+        (bit64::is.integer64(shape) && length(shape) == self$ndim())
+      )
+      # Checking slotwise new shape >= old shape, and <= max_shape, is already done in libtiledbsoma
+
+      tiledbsoma_upgrade_shape(self$uri, shape, config=as.character(tiledb::config(self$tiledbsoma_ctx$context())))
     }
 
   ),
@@ -216,25 +254,54 @@ SOMASparseNDArray <- R6::R6Class(
     },
 
     # @description Ingest COO-formatted dataframe into the TileDB array.
-    # (lifecycle: experimental)
+    # (lifecycle: maturing)
     # @param values A [`data.frame`].
     .write_coo_dataframe = function(values) {
       private$check_open_for_write()
 
       stopifnot(is.data.frame(values))
       # private$log_array_ingestion()
-      arr <- self$object
-      if (!is.null(private$tiledb_timestamp)) {
-          arr@timestamp <- private$tiledb_timestamp
+      #arr <- self$object
+      #if (!is.null(self$tiledb_timestamp)) {
+      #    # arr@timestamp <- self$tiledb_timestamp
+      #   arr@timestamp_end <- self$tiledb_timestamp
+      #}
+      nms <- colnames(values)
+
+      ## the 'soma_data' data type may not have been cached, and if so we need to fetch it
+      if (is.null(private$.type)) {
+          ## TODO: replace with a libtiledbsoma accessor as discussed
+          tpstr <- tiledb::datatype(tiledb::attrs(tiledb::schema(self$uri))[["soma_data"]])
+          arstr <- arrow_type_from_tiledb_type(tpstr)
+          private$.type <- arstr
       }
-      arr[] <- values
+
+      arrsch <- arrow::schema(arrow::field(nms[1], arrow::int64()),
+                              arrow::field(nms[2], arrow::int64()),
+                              arrow::field(nms[3], private$.type))
+
+      tbl <- arrow::arrow_table(values, schema = arrsch)
+      spdl::debug(
+        "[SOMASparseNDArray$write] array created, writing to {} at ({})",
+        self$uri,
+        self$tiledb_timestamp %||% "now"
+      )
+      naap <- nanoarrow::nanoarrow_allocate_array()
+      nasp <- nanoarrow::nanoarrow_allocate_schema()
+      arrow::as_record_batch(tbl)$export_to_c(naap, nasp)
+      writeArrayFromArrow(
+        uri = self$uri,
+        naap = naap,
+        nasp = nasp,
+        ctxxp = private$.soma_context,
+        arraytype = "SOMASparseNDArray",
+        config = NULL,
+        tsvec = self$.tiledb_timestamp_range
+      )
     },
 
     # Internal marking of one or zero based matrices for iterated reads
-    zero_based = NA,
-
-    # Internal variable to hold onto context returned by sr_setup
-    ctx_ptr = NULL
+    zero_based = NA
 
   )
 )

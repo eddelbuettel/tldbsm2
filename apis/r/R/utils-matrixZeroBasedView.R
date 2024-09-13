@@ -9,7 +9,7 @@ matrixZeroBasedView <- R6::R6Class(
   classname = "matrixZeroBasedView",
   public = list(
 
-    #' @description Initialize (lifecycle: experimental)
+    #' @description Initialize (lifecycle: maturing)
     #' @param x \link{matrix} or Matrix::\link[Matrix]{sparseMatrix} or Matrix::\link[Matrix]{Matrix}
     initialize = function(x) {
       if (!inherits(x, "matrix") && !inherits(x, "sparseMatrix") && !inherits(one_based_matrix, "Matrix")) {
@@ -66,9 +66,9 @@ matrixZeroBasedView <- R6::R6Class(
       private$one_based_matrix
     },
 
-    #' @description Perform arithmetic sum between this link{matrixZeroBasedView}
-    #' and another link{matrixZeroBasedView}.
-    #' @param x the link{matrixZeroBasedView} to sum.
+    #' @description Perform arithmetic sum between this \link{matrixZeroBasedView}
+    #' and another \link{matrixZeroBasedView}.
+    #' @param x the \link{matrixZeroBasedView} to sum.
     #' @return The result of the sum as a \link{matrixZeroBasedView}.
     sum = function(x) {
       if (!inherits(x, "matrixZeroBasedView")) {

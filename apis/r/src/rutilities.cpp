@@ -8,6 +8,7 @@
 #include <nanoarrow/nanoarrow.h>            // for C interface to Arrow
 #include <RcppInt64>                        // for fromInteger64
 #include <tiledbsoma/tiledbsoma>
+#include <tiledbsoma/reindexer/reindexer.h>
 
 #include "rutilities.h"         // local declarations
 #include "xptr-utils.h"         // xptr taggging utilitie
@@ -42,7 +43,7 @@ void apply_dim_points(tdbs::SOMAArray *sr,
             for (size_t i=0; i<iv.size(); i++) {
                 if (iv[i] >= pr.first && iv[i] <= pr.second) {
                     sr->set_dim_point<int64_t>(nm, iv[i]);
-                    spdl::info("[apply_dim_points] Applying dim point {} on {}", iv[i], nm);
+                    spdl::debug("[apply_dim_points] Applying dim point {} on {}", iv[i], nm);
                     suitable = true;
                 }
             }
@@ -53,7 +54,7 @@ void apply_dim_points(tdbs::SOMAArray *sr,
                 float v = static_cast<float>(payload[i]);
                 if (v >= pr.first && v <= pr.second) {
                     sr->set_dim_point<float>(nm, v);
-                    spdl::info("[apply_dim_points] Applying dim point {} on {}", v, nm);
+                    spdl::debug("[apply_dim_points] Applying dim point {} on {}", v, nm);
                     suitable = true;
                 }
             }
@@ -63,7 +64,7 @@ void apply_dim_points(tdbs::SOMAArray *sr,
             for (R_xlen_t i=0; i<payload.size(); i++) {
                 if (payload[i] >= pr.first && payload[i] <= pr.second) {
                     sr->set_dim_point<double>(nm,payload[i]);
-                    spdl::info("[apply_dim_points] Applying dim point {} on {}", payload[i], nm);
+                    spdl::debug("[apply_dim_points] Applying dim point {} on {}", payload[i], nm);
                     suitable = true;
                 }
             }
@@ -73,7 +74,7 @@ void apply_dim_points(tdbs::SOMAArray *sr,
             for (R_xlen_t i=0; i<payload.size(); i++) {
                 if (payload[i] >= pr.first && payload[i] <= pr.second) {
                     sr->set_dim_point<int32_t>(nm,payload[i]);
-                    spdl::info("[apply_dim_points] Applying dim point {} on {}", payload[i], nm);
+                    spdl::debug("[apply_dim_points] Applying dim point {} on {}", payload[i], nm);
                     suitable = true;
                 }
             }
@@ -104,7 +105,7 @@ void apply_dim_ranges(tdbs::SOMAArray* sr,
                 uint64_t l = static_cast<uint64_t>(Rcpp::fromInteger64(lo[i]));
                 uint64_t h = static_cast<uint64_t>(Rcpp::fromInteger64(hi[i]));
                 vp[i] = std::make_pair(std::max(l,pr.first), std::min(h, pr.second));
-                spdl::info("[apply_dim_ranges] Applying dim point {} on {} with {} - {}", i, nm, l, h) ;
+                spdl::debug("[apply_dim_ranges] Applying dim point {} on {} with {} - {}", i, nm, l, h) ;
                 suitable = l < pr.second && h > pr.first; // lower must be less than max, higher more than min
             }
             if (suitable) sr->set_dim_ranges<uint64_t>(nm, vp);
@@ -116,7 +117,7 @@ void apply_dim_ranges(tdbs::SOMAArray* sr,
             const std::pair<int64_t,int64_t> pr = dm->domain<int64_t>();
             for (int i=0; i<mm.nrow(); i++) {
                 vp[i] = std::make_pair(std::max(lo[i],pr.first), std::min(hi[i], pr.second));
-                spdl::info("[apply_dim_ranges] Applying dim point {} on {} with {} - {}", i, nm, lo[i], hi[i]) ;
+                spdl::debug("[apply_dim_ranges] Applying dim point {} on {} with {} - {}", i, nm, lo[i], hi[i]) ;
                 suitable = lo[i] < pr.second && hi[i] > pr.first; // lower must be less than max, higher more than min
             }
             if (suitable) sr->set_dim_ranges<int64_t>(nm, vp);
@@ -130,7 +131,7 @@ void apply_dim_ranges(tdbs::SOMAArray* sr,
                 float l = static_cast<float>(lo[i]);
                 float h = static_cast<float>(hi[i]);
                 vp[i] = std::make_pair(std::max(l,pr.first), std::min(h, pr.second));
-                spdl::info("[apply_dim_ranges] Applying dim point {} on {} with {} - {}", i, nm, l, h) ;
+                spdl::debug("[apply_dim_ranges] Applying dim point {} on {} with {} - {}", i, nm, l, h) ;
                 suitable = l < pr.second && h > pr.first; // lower must be less than max, higher more than min
             }
             if (suitable) sr->set_dim_ranges<float>(nm, vp);
@@ -142,7 +143,7 @@ void apply_dim_ranges(tdbs::SOMAArray* sr,
             const std::pair<double,double> pr = dm->domain<double>();
             for (int i=0; i<mm.nrow(); i++) {
                 vp[i] = std::make_pair(std::max(lo[i],pr.first), std::min(hi[i], pr.second));
-                spdl::info("[apply_dim_ranges] Applying dim point {} on {} with {} - {}", i, nm, lo[i], hi[i]) ;
+                spdl::debug("[apply_dim_ranges] Applying dim point {} on {} with {} - {}", i, nm, lo[i], hi[i]) ;
                 suitable = lo[i] < pr.second && hi[i] > pr.first; // lower must be less than max, higher more than min
             }
             if (suitable) sr->set_dim_ranges<double>(nm, vp);
@@ -154,7 +155,7 @@ void apply_dim_ranges(tdbs::SOMAArray* sr,
             const std::pair<int32_t,int32_t> pr = dm->domain<int32_t>();
             for (int i=0; i<mm.nrow(); i++) {
                 vp[i] = std::make_pair(std::max(lo[i],pr.first), std::min(hi[i], pr.second));
-                spdl::info("[apply_dim_ranges] Applying dim point {} on {} with {} - {}", i, nm[i], lo[i], hi[i]) ;
+                spdl::debug("[apply_dim_ranges] Applying dim point {} on {} with {} - {}", i, nm[i], lo[i], hi[i]) ;
                 suitable = lo[i] < pr.second && hi[i] > pr.first; // lower must be less than max, higher more than min
             }
             if (suitable) sr->set_dim_ranges<int32_t>(nm, vp);
@@ -199,6 +200,17 @@ Rcpp::XPtr<ArrowSchema> schema_setup_struct(Rcpp::XPtr<ArrowSchema> schxp, int64
         }
     }
     return schxp;
+}
+
+std::vector<int64_t> i64_from_rcpp_numeric(const Rcpp::NumericVector& input) {
+
+  auto ndim = input.size();
+  std::vector<int64_t> output(ndim);
+  for (auto i = 0; i < ndim; i++) {
+    output[i] = input[i];
+  }
+
+  return output;
 }
 
 
@@ -251,11 +263,15 @@ std::string tiledbsoma_stats_dump() {
 //' version is returned,
 //' @noRd
 // [[Rcpp::export]]
-std::string libtiledbsoma_version(const bool compact = false) {
+std::string libtiledbsoma_version(const bool compact = false, const bool major_minor_only = false) {
     if (compact) {
         auto v = tiledbsoma::version::embedded_version_triple();
         std::ostringstream txt;
-        txt << std::get<0>(v) << "." << std::get<1>(v) << "." << std::get<2>(v);
+        if (major_minor_only) {
+            txt << std::get<0>(v) << "." << std::get<1>(v);
+        } else {
+            txt << std::get<0>(v) << "." << std::get<1>(v) << "." << std::get<2>(v);
+        }
         return txt.str();
     } else {
         return tiledbsoma::version::as_string();
@@ -286,4 +302,27 @@ size_t tiledb_datatype_max_value(const std::string& datatype) {
     else if (datatype == "INT64")  return std::numeric_limits<int64_t>::max();
     else if (datatype == "UINT64") return std::numeric_limits<uint64_t>::max();
     else Rcpp::stop("currently unsupported datatype (%s)", datatype);
+}
+
+// Make (optional) TimestampRange from (nullable, two-element) Rcpp::DatetimeVector
+std::optional<tdbs::TimestampRange> makeTimestampRange(Rcpp::Nullable<Rcpp::DatetimeVector> tsvec) {
+
+    // optional timestamp, defaults to 'none' aka std::nullopt
+    std::optional<tdbs::TimestampRange> tsrng = std::nullopt;
+
+    if (tsvec.isNotNull()) {
+        // an Rcpp 'Nullable' is a decent compromise between adhering to SEXP semantics
+        // and having 'optional' behaviour -- but when there is a value we need to be explicit
+        Rcpp::DatetimeVector vec(tsvec); // vector of Rcpp::Datetime ie POSIXct w/ (fract.) secs since epoch
+        if (vec.size() == 1) {
+            tsrng = std::make_pair<uint64_t>( 0, static_cast<uint64_t>(Rcpp::Datetime(vec[0]).getFractionalTimestamp() * 1000) );
+        } else if (vec.size() == 2) {
+        tsrng = std::make_pair<uint64_t>( static_cast<uint64_t>(Rcpp::Datetime(vec[0]).getFractionalTimestamp() * 1000),
+                                          static_cast<uint64_t>(Rcpp::Datetime(vec[1]).getFractionalTimestamp() * 1000) );
+        } else {
+            Rcpp::stop("TimestampRange must be a one or two-element vector");
+        }
+    }
+
+    return tsrng;
 }

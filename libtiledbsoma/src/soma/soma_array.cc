@@ -5,7 +5,7 @@
  *
  * The MIT License
  *
- * @copyright Copyright (c) 2022-2023 TileDB, Inc.
+ * @copyright Copyright (c) 2022-2024 TileDB, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -219,6 +219,19 @@ void SOMAArray::open(OpenMode mode, std::optional<TimestampRange> timestamp) {
     fill_metadata_cache();
 }
 
+std::unique_ptr<SOMAArray> SOMAArray::reopen(
+    OpenMode mode, std::optional<TimestampRange> timestamp) {
+    return std::make_unique<SOMAArray>(
+        mode,
+        uri_,
+        ctx_,
+        name_,
+        column_names(),
+        batch_size_,
+        result_order_,
+        timestamp);
+}
+
 void SOMAArray::close() {
     if (arr_->query_type() == TILEDB_WRITE)
         meta_cache_arr_->close();
@@ -292,126 +305,232 @@ std::optional<std::shared_ptr<ArrayBuffers>> SOMAArray::read_next() {
     return mq_->results();
 }
 
-Enumeration SOMAArray::extend_enumeration(
-    std::string_view name,
-    uint64_t num_elems,
-    const void* data,
-    uint64_t* offsets) {
+bool SOMAArray::_extend_enumeration(
+    ArrowSchema* value_schema,
+    ArrowArray* value_array,
+    ArrowSchema* index_schema,
+    ArrowArray* index_array,
+    ArraySchemaEvolution se) {
     auto enmr = ArrayExperimental::get_enumeration(
-        *ctx_->tiledb_ctx(), *arr_, std::string(name));
+        *ctx_->tiledb_ctx(), *arr_, index_schema->name);
+    auto value_type = enmr.type();
 
-    uint64_t max_capacity;
-    switch (tiledb_schema()->attribute(std::string(name)).type()) {
+    switch (value_type) {
+        case TILEDB_STRING_ASCII:
+        case TILEDB_STRING_UTF8:
+        case TILEDB_CHAR:
+            return SOMAArray::_extend_and_evolve_schema<std::string>(
+                value_schema, value_array, index_schema, index_array, se);
+        case TILEDB_BOOL:
+            _cast_bit_to_uint8(value_schema, value_array);
+            return SOMAArray::_extend_and_evolve_schema<uint8_t>(
+                value_schema, value_array, index_schema, index_array, se);
         case TILEDB_INT8:
-            max_capacity = std::numeric_limits<int8_t>::max();
-            break;
+            return SOMAArray::_extend_and_evolve_schema<uint8_t>(
+                value_schema, value_array, index_schema, index_array, se);
         case TILEDB_UINT8:
-            max_capacity = std::numeric_limits<uint8_t>::max();
-            break;
+            return SOMAArray::_extend_and_evolve_schema<uint8_t>(
+                value_schema, value_array, index_schema, index_array, se);
         case TILEDB_INT16:
-            max_capacity = std::numeric_limits<int16_t>::max();
-            break;
+            return SOMAArray::_extend_and_evolve_schema<int16_t>(
+                value_schema, value_array, index_schema, index_array, se);
         case TILEDB_UINT16:
-            max_capacity = std::numeric_limits<uint16_t>::max();
-            break;
+            return SOMAArray::_extend_and_evolve_schema<uint16_t>(
+                value_schema, value_array, index_schema, index_array, se);
         case TILEDB_INT32:
-            max_capacity = std::numeric_limits<int32_t>::max();
-            break;
+            return SOMAArray::_extend_and_evolve_schema<int32_t>(
+                value_schema, value_array, index_schema, index_array, se);
         case TILEDB_UINT32:
-            max_capacity = std::numeric_limits<uint32_t>::max();
-            break;
+            return SOMAArray::_extend_and_evolve_schema<uint32_t>(
+                value_schema, value_array, index_schema, index_array, se);
         case TILEDB_INT64:
-            max_capacity = std::numeric_limits<int64_t>::max();
-            break;
+            return SOMAArray::_extend_and_evolve_schema<int64_t>(
+                value_schema, value_array, index_schema, index_array, se);
         case TILEDB_UINT64:
-            max_capacity = std::numeric_limits<uint64_t>::max();
-            break;
+            return SOMAArray::_extend_and_evolve_schema<uint64_t>(
+                value_schema, value_array, index_schema, index_array, se);
+        case TILEDB_FLOAT32:
+            return SOMAArray::_extend_and_evolve_schema<float>(
+                value_schema, value_array, index_schema, index_array, se);
+        case TILEDB_FLOAT64:
+            return SOMAArray::_extend_and_evolve_schema<double>(
+                value_schema, value_array, index_schema, index_array, se);
+        default:
+            throw TileDBSOMAError(fmt::format(
+                "ArrowAdapter: Unsupported TileDB dict datatype: {} ",
+                tiledb::impl::type_to_str(value_type)));
+    }
+}
+
+template <typename ValueType>
+bool SOMAArray::_extend_and_evolve_schema(
+    ArrowSchema* value_schema,
+    ArrowArray* value_array,
+    ArrowSchema* index_schema,
+    ArrowArray* index_array,
+    ArraySchemaEvolution se) {
+    (void)value_schema;  // unused for generic; used in string specialization
+
+    std::string column_name = index_schema->name;
+    auto disk_index_type = tiledb_schema()->attribute(column_name).type();
+    auto enmr = ArrayExperimental::get_enumeration(
+        *ctx_->tiledb_ctx(), *arr_, column_name);
+    uint64_t max_capacity = SOMAArray::_get_max_capacity(disk_index_type);
+
+    const void* data;
+    uint64_t num_elems = value_array->length;
+    if (value_array->n_buffers == 3) {
+        data = value_array->buffers[2];
+    } else {
+        data = value_array->buffers[1];
+    }
+
+    std::vector<ValueType> enums_in_write(
+        (ValueType*)data, (ValueType*)data + num_elems);
+    auto enums_existing = enmr.as_vector<ValueType>();
+    std::vector<ValueType> extend_values;
+    for (auto enum_val : enums_in_write) {
+        if (std::find(enums_existing.begin(), enums_existing.end(), enum_val) ==
+            enums_existing.end()) {
+            extend_values.push_back(enum_val);
+        }
+    }
+
+    if (extend_values.size() != 0) {
+        auto free_capacity = max_capacity - enums_existing.size();
+        if (free_capacity < extend_values.size()) {
+            throw TileDBSOMAError(
+                "Cannot extend enumeration; reached maximum capacity");
+        }
+        auto extended_enmr = enmr.extend(extend_values);
+        se.extend_enumeration(extended_enmr);
+        SOMAArray::_remap_indexes(
+            column_name,
+            extended_enmr,
+            enums_in_write,
+            index_schema,
+            index_array);
+
+        index_schema->format = ArrowAdapter::to_arrow_format(disk_index_type)
+                                   .data();
+        return true;
+    }
+    return false;
+}
+
+template <>
+bool SOMAArray::_extend_and_evolve_schema<std::string>(
+    ArrowSchema* value_schema,
+    ArrowArray* value_array,
+    ArrowSchema* index_schema,
+    ArrowArray* index_array,
+    ArraySchemaEvolution se) {
+    uint64_t num_elems = value_array->length;
+
+    std::vector<uint64_t> offsets_v;
+    if ((strcmp(value_schema->format, "U") == 0) ||
+        (strcmp(value_schema->format, "Z") == 0)) {
+        uint64_t* offsets = (uint64_t*)value_array->buffers[1];
+        offsets_v.resize(num_elems + 1);
+        offsets_v.assign(offsets, offsets + num_elems + 1);
+    } else {
+        uint32_t* offsets = (uint32_t*)value_array->buffers[1];
+        std::vector<uint32_t> offset_holder(offsets, offsets + num_elems + 1);
+        for (auto offset : offset_holder) {
+            offsets_v.push_back((uint64_t)offset);
+        }
+    }
+
+    char* data = (char*)value_array->buffers[2];
+    std::string data_v(data, data + offsets_v[offsets_v.size() - 1]);
+
+    std::vector<std::string> enums_in_write;
+    for (size_t offset_idx = 0; offset_idx < offsets_v.size() - 1;
+         ++offset_idx) {
+        auto beg = offsets_v[offset_idx];
+        auto sz = offsets_v[offset_idx + 1] - beg;
+        enums_in_write.push_back(data_v.substr(beg, sz));
+    }
+
+    std::string column_name = index_schema->name;
+    auto enmr = ArrayExperimental::get_enumeration(
+        *ctx_->tiledb_ctx(), *arr_, column_name);
+    std::vector<std::string> extend_values;
+    auto enums_existing = enmr.as_vector<std::string>();
+    for (auto enum_val : enums_in_write) {
+        if (std::find(enums_existing.begin(), enums_existing.end(), enum_val) ==
+            enums_existing.end()) {
+            extend_values.push_back(enum_val);
+        }
+    }
+
+    if (extend_values.size() != 0) {
+        // Check that we extend the enumeration values without
+        // overflowing
+        auto disk_index_type = tiledb_schema()->attribute(column_name).type();
+        uint64_t max_capacity = SOMAArray::_get_max_capacity(disk_index_type);
+        auto free_capacity = max_capacity - enums_existing.size();
+        if (free_capacity < extend_values.size()) {
+            throw TileDBSOMAError(
+                "Cannot extend enumeration; reached maximum capacity");
+        }
+
+        auto extended_enmr = enmr.extend(extend_values);
+        se.extend_enumeration(extended_enmr);
+
+        SOMAArray::_remap_indexes(
+            column_name,
+            extended_enmr,
+            enums_in_write,
+            index_schema,
+            index_array);
+
+        index_schema->format = ArrowAdapter::to_arrow_format(disk_index_type)
+                                   .data();
+        return true;
+    } else {
+        // Example:
+        //
+        // * Already on storage/schema there are values a,b,c with indices
+        //   0,1,2.
+        // * User appends values b,c which, within the Arrow data coming in
+        //   from the user, have indices 0,1.
+        // * We need to remap those to 1,2.
+
+        SOMAArray::_remap_indexes(
+            column_name, enmr, enums_in_write, index_schema, index_array);
+    }
+    return false;
+}
+
+uint64_t SOMAArray::_get_max_capacity(tiledb_datatype_t index_type) {
+    switch (index_type) {
+        case TILEDB_INT8:
+            return std::numeric_limits<int8_t>::max();
+        case TILEDB_UINT8:
+            return std::numeric_limits<uint8_t>::max();
+        case TILEDB_INT16:
+            return std::numeric_limits<int16_t>::max();
+        case TILEDB_UINT16:
+            return std::numeric_limits<uint16_t>::max();
+        case TILEDB_INT32:
+            return std::numeric_limits<int32_t>::max();
+        case TILEDB_UINT32:
+            return std::numeric_limits<uint32_t>::max();
+        case TILEDB_INT64:
+            return std::numeric_limits<int64_t>::max();
+        case TILEDB_UINT64:
+            return std::numeric_limits<uint64_t>::max();
         default:
             throw TileDBSOMAError(
                 "Saw invalid enumeration index type when trying to extend "
                 "enumeration");
     }
+}
 
-    switch (enmr.type()) {
-        case TILEDB_STRING_ASCII:
-        case TILEDB_STRING_UTF8:
-        case TILEDB_CHAR: {
-            std::vector<uint64_t> offsets_v(
-                (uint32_t*)offsets, (uint32_t*)offsets + num_elems + 1);
-            std::string data_v(
-                (char*)data, (char*)data + offsets_v[offsets_v.size() - 1]);
-            std::vector<std::string> enums_in_write;
-
-            for (size_t offset_idx = 0; offset_idx < offsets_v.size() - 1;
-                 ++offset_idx) {
-                auto beg = offsets_v[offset_idx];
-                auto sz = offsets_v[offset_idx + 1] - beg;
-                enums_in_write.push_back(data_v.substr(beg, sz));
-            }
-
-            std::vector<std::string> extend_values;
-            auto enums_existing = enmr.as_vector<std::string>();
-            for (auto enum_val : enums_in_write) {
-                if (std::find(
-                        enums_existing.begin(),
-                        enums_existing.end(),
-                        enum_val) == enums_existing.end()) {
-                    extend_values.push_back(enum_val);
-                }
-            }
-
-            if (extend_values.size() != 0) {
-                // Check that we extend the enumeration values without
-                // overflowing
-                auto free_capacity = max_capacity - enums_existing.size();
-                if (free_capacity < extend_values.size()) {
-                    throw TileDBSOMAError(
-                        "Cannot extend enumeration; reached maximum capacity");
-                }
-                ArraySchemaEvolution se(*ctx_->tiledb_ctx());
-                se.extend_enumeration(enmr.extend(extend_values));
-                se.array_evolve(uri_);
-                return enmr.extend(extend_values);
-            }
-
-            return enmr;
-        }
-        case TILEDB_BOOL:
-        case TILEDB_INT8:
-            return SOMAArray::_extend_value_helper(
-                (int8_t*)data, num_elems, enmr, max_capacity);
-        case TILEDB_UINT8:
-            return SOMAArray::_extend_value_helper(
-                (uint8_t*)data, num_elems, enmr, max_capacity);
-        case TILEDB_INT16:
-            return SOMAArray::_extend_value_helper(
-                (int16_t*)data, num_elems, enmr, max_capacity);
-        case TILEDB_UINT16:
-            return SOMAArray::_extend_value_helper(
-                (uint16_t*)data, num_elems, enmr, max_capacity);
-        case TILEDB_INT32:
-            return SOMAArray::_extend_value_helper(
-                (int32_t*)data, num_elems, enmr, max_capacity);
-        case TILEDB_UINT32:
-            return SOMAArray::_extend_value_helper(
-                (uint32_t*)data, num_elems, enmr, max_capacity);
-        case TILEDB_INT64:
-            return SOMAArray::_extend_value_helper(
-                (int64_t*)data, num_elems, enmr, max_capacity);
-        case TILEDB_UINT64:
-            return SOMAArray::_extend_value_helper(
-                (uint64_t*)data, num_elems, enmr, max_capacity);
-        case TILEDB_FLOAT32:
-            return SOMAArray::_extend_value_helper(
-                (float*)data, num_elems, enmr, max_capacity);
-        case TILEDB_FLOAT64:
-            return SOMAArray::_extend_value_helper(
-                (double*)data, num_elems, enmr, max_capacity);
-        default:
-            throw TileDBSOMAError(fmt::format(
-                "ArrowAdapter: Unsupported TileDB dict datatype: {} ",
-                tiledb::impl::type_to_str(enmr.type())));
-    }
+ArraySchemaEvolution SOMAArray::_make_se() {
+    ArraySchemaEvolution se(*ctx_->tiledb_ctx());
+    return se;
 }
 
 void SOMAArray::set_column_data(
@@ -420,25 +539,19 @@ void SOMAArray::set_column_data(
     const void* data,
     uint64_t* offsets,
     uint8_t* validity) {
-    if (mq_->query_type() != TILEDB_WRITE) {
-        throw TileDBSOMAError("[SOMAArray] array must be opened in write mode");
-    }
-
-    // Create the array_buffer_ as necessary
-    if (array_buffer_ == nullptr)
-        array_buffer_ = std::make_shared<ArrayBuffers>();
-
-    // Create a ColumnBuffer object instead of passing it in as an argument to
-    // `set_column_data` because ColumnBuffer::create requires a TileDB Array
-    // argument which should remain a private member of SOMAArray
-    auto column = ColumnBuffer::create(arr_, name);
+    auto column = mq_->setup_column_data(name);
     column->set_data(num_elems, data, offsets, validity);
+    mq_->set_column_data(column);
+};
 
-    // Keep the ColumnBuffer alive by attaching it to the ArrayBuffers class
-    // member. Otherwise, the data held by the ColumnBuffer will be garbage
-    // collected before it is submitted to the write query
-    array_buffer_->emplace(std::string(name), column);
-
+void SOMAArray::set_column_data(
+    std::string_view name,
+    uint64_t num_elems,
+    const void* data,
+    uint32_t* offsets,
+    uint8_t* validity) {
+    auto column = mq_->setup_column_data(name);
+    column->set_data(num_elems, data, offsets, validity);
     mq_->set_column_data(column);
 };
 
@@ -449,269 +562,662 @@ void SOMAArray::set_array_data(
         throw TileDBSOMAError("[SOMAArray] array must be opened in write mode");
     }
 
-    // Create the array_buffer_ as necessary
-    if (array_buffer_ == nullptr)
-        array_buffer_ = std::make_shared<ArrayBuffers>();
+    auto [casted_array, casted_schema] = SOMAArray::_cast_table(
+        std::move(arrow_schema), std::move(arrow_array));
 
-    for (auto i = 0; i < arrow_schema->n_children; ++i) {
-        auto arrow_sch_ = arrow_schema->children[i];
-        auto arrow_arr_ = arrow_array->children[i];
-
-        const void* data;
-        uint64_t* offsets = nullptr;
-
-        uint8_t* validities = nullptr;
-        if (arrow_arr_->null_count != 0) {
-            validities = (uint8_t*)arrow_arr_->buffers[0];
-        }
-
-        if (arrow_arr_->n_buffers == 3) {
-            offsets = (uint64_t*)arrow_arr_->buffers[1];
-            data = arrow_arr_->buffers[2];
-        } else {
-            data = arrow_arr_->buffers[1];
-        }
-
-        auto table_offset = arrow_arr_->offset;
-        auto data_size = tiledb::impl::type_size(
-            ArrowAdapter::to_tiledb_format(arrow_sch_->format));
-
-        if (offsets) {
-            offsets += table_offset;
-        }
-        if (validities) {
-            validities += table_offset;
-        }
+    for (auto i = 0; i < casted_schema->n_children; ++i) {
+        auto arrow_sch_ = casted_schema->children[i];
+        auto arrow_arr_ = casted_array->children[i];
 
         // Create a ColumnBuffer object instead of passing it in as an argument
         // to `set_column_data` because ColumnBuffer::create requires a TileDB
         // Array argument which should remain a private member of SOMAArray
-        auto column = ColumnBuffer::create(arr_, arrow_sch_->name);
-        column->set_data(
-            arrow_arr_->length,
-            (char*)data + table_offset * data_size,
-            offsets,
-            validities);
+        auto column = mq_->setup_column_data(arrow_sch_->name);
 
-        // Keep the ColumnBuffer alive by attaching it to the ArrayBuffers class
-        // member. Otherwise, the data held by the ColumnBuffer will be garbage
-        // collected before it is submitted to the write query
-        array_buffer_->emplace(std::string(arrow_sch_->name), column);
+        const void* data;
+        uint8_t* validities = nullptr;
+        auto table_offset = arrow_arr_->offset;
+        auto data_size = tiledb::impl::type_size(
+            ArrowAdapter::to_tiledb_format(arrow_sch_->format));
 
+        if (arrow_arr_->null_count != 0) {
+            validities = (uint8_t*)arrow_arr_->buffers[0] + table_offset;
+        }
+
+        if (arrow_arr_->n_buffers == 3) {
+            data = arrow_arr_->buffers[2];
+            uint64_t* offsets = (uint64_t*)arrow_arr_->buffers[1] +
+                                table_offset;
+            column->set_data(
+                arrow_arr_->length,
+                (char*)data + table_offset * data_size,
+                offsets,
+                validities);
+        } else {
+            data = arrow_arr_->buffers[1];
+            column->set_data(
+                arrow_arr_->length,
+                (char*)data + table_offset * data_size,
+                static_cast<uint64_t*>(nullptr),
+                validities);
+        }
         mq_->set_column_data(column);
     }
 };
 
-void SOMAArray::write() {
-    if (mq_->query_type() != TILEDB_WRITE) {
-        throw TileDBSOMAError("[SOMAArray] array must be opened in write mode");
-    }
-    mq_->submit_write();
+template <>
+void SOMAArray::_cast_dictionary_values<std::string>(
+    ArrowSchema* orig_column_schema,
+    ArrowArray* orig_column_array,
+    ArrowArray* new_column_array) {
+    auto value_schema = orig_column_schema->dictionary;
+    auto value_array = orig_column_array->dictionary;
 
-    mq_->reset();
-    array_buffer_ = nullptr;
+    new_column_array->n_buffers = 3;
+    new_column_array->buffers = new const void*[3];
+
+    uint64_t num_elems = value_array->length;
+
+    std::vector<uint64_t> offsets_v;
+    if ((strcmp(value_schema->format, "U") == 0) ||
+        (strcmp(value_schema->format, "Z") == 0)) {
+        uint64_t* offsets = (uint64_t*)value_array->buffers[1];
+        offsets_v.resize(num_elems + 1);
+        offsets_v.assign(offsets, offsets + num_elems + 1);
+    } else {
+        uint32_t* offsets = (uint32_t*)value_array->buffers[1];
+        std::vector<uint32_t> offset_holder(offsets, offsets + num_elems + 1);
+        for (auto offset : offset_holder) {
+            offsets_v.push_back((uint64_t)offset);
+        }
+    }
+
+    char* data = (char*)value_array->buffers[2];
+    std::string data_v(data, data + offsets_v[offsets_v.size() - 1]);
+
+    std::vector<std::string> values;
+    for (size_t offset_idx = 0; offset_idx < offsets_v.size() - 1;
+         ++offset_idx) {
+        auto beg = offsets_v[offset_idx];
+        auto sz = offsets_v[offset_idx + 1] - beg;
+        values.push_back(data_v.substr(beg, sz));
+    }
+
+    std::vector<int64_t> indexes = SOMAArray::_get_index_vector(
+        orig_column_schema, orig_column_array);
+
+    uint64_t offset_sum = 0;
+    std::vector<uint64_t> value_offsets = {0};
+    std::string index_to_value;
+    for (auto i : indexes) {
+        auto value = values[i];
+        offset_sum += value.size();
+        value_offsets.push_back(offset_sum);
+        index_to_value.insert(index_to_value.end(), value.begin(), value.end());
+    }
+    new_column_array->buffers[0] = orig_column_array->buffers[0];
+
+    new_column_array->buffers[1] = malloc(
+        sizeof(uint64_t) * value_offsets.size());
+    std::memcpy(
+        (void*)new_column_array->buffers[1],
+        value_offsets.data(),
+        sizeof(uint64_t) * value_offsets.size());
+
+    new_column_array->buffers[2] = strdup(index_to_value.c_str());
 }
 
-uint64_t SOMAArray::nnz() {
-    // Verify array is sparse
-    if (mq_->schema()->array_type() != TILEDB_SPARSE) {
-        throw TileDBSOMAError(
-            "[SOMAArray] nnz is only supported for sparse arrays");
+void SOMAArray::_promote_indexes_to_values(
+    ArrowSchema* orig_column_schema,
+    ArrowArray* orig_column_array,
+    ArrowArray* new_column_array) {
+    auto value_type = ArrowAdapter::to_tiledb_format(
+        orig_column_schema->dictionary->format);
+    switch (value_type) {
+        case TILEDB_STRING_ASCII:
+        case TILEDB_STRING_UTF8:
+        case TILEDB_CHAR:
+            return SOMAArray::_cast_dictionary_values<std::string>(
+                orig_column_schema, orig_column_array, new_column_array);
+        case TILEDB_BOOL:
+        case TILEDB_INT8:
+            return SOMAArray::_cast_dictionary_values<int8_t>(
+                orig_column_schema, orig_column_array, new_column_array);
+        case TILEDB_UINT8:
+            return SOMAArray::_cast_dictionary_values<uint8_t>(
+                orig_column_schema, orig_column_array, new_column_array);
+        case TILEDB_INT16:
+            return SOMAArray::_cast_dictionary_values<int16_t>(
+                orig_column_schema, orig_column_array, new_column_array);
+        case TILEDB_UINT16:
+            return SOMAArray::_cast_dictionary_values<uint16_t>(
+                orig_column_schema, orig_column_array, new_column_array);
+        case TILEDB_INT32:
+            return SOMAArray::_cast_dictionary_values<int32_t>(
+                orig_column_schema, orig_column_array, new_column_array);
+        case TILEDB_UINT32:
+            return SOMAArray::_cast_dictionary_values<uint32_t>(
+                orig_column_schema, orig_column_array, new_column_array);
+        case TILEDB_INT64:
+            return SOMAArray::_cast_dictionary_values<int64_t>(
+                orig_column_schema, orig_column_array, new_column_array);
+        case TILEDB_DATETIME_YEAR:
+        case TILEDB_DATETIME_MONTH:
+        case TILEDB_DATETIME_WEEK:
+        case TILEDB_DATETIME_DAY:
+        case TILEDB_DATETIME_HR:
+        case TILEDB_DATETIME_MIN:
+        case TILEDB_DATETIME_SEC:
+        case TILEDB_DATETIME_MS:
+        case TILEDB_DATETIME_US:
+        case TILEDB_DATETIME_NS:
+        case TILEDB_DATETIME_PS:
+        case TILEDB_DATETIME_FS:
+        case TILEDB_DATETIME_AS:
+        case TILEDB_TIME_HR:
+        case TILEDB_TIME_MIN:
+        case TILEDB_TIME_SEC:
+        case TILEDB_TIME_MS:
+        case TILEDB_TIME_US:
+        case TILEDB_TIME_NS:
+        case TILEDB_TIME_PS:
+        case TILEDB_TIME_FS:
+        case TILEDB_TIME_AS:
+        case TILEDB_UINT64:
+            return SOMAArray::_cast_dictionary_values<uint64_t>(
+                orig_column_schema, orig_column_array, new_column_array);
+        case TILEDB_FLOAT32:
+            return SOMAArray::_cast_dictionary_values<float>(
+                orig_column_schema, orig_column_array, new_column_array);
+        case TILEDB_FLOAT64:
+            return SOMAArray::_cast_dictionary_values<double>(
+                orig_column_schema, orig_column_array, new_column_array);
+        default:
+            throw TileDBSOMAError(fmt::format(
+                "Saw invalid TileDB value type when attempting to "
+                "promote indexes to values: {}",
+                tiledb::impl::type_to_str(value_type)));
+    }
+}
+
+ArrowTable SOMAArray::_cast_table(
+    std::unique_ptr<ArrowSchema> arrow_schema,
+    std::unique_ptr<ArrowArray> arrow_array) {
+    // Create the new ArrowSchema and ArrowArray for the ArrowTable that we
+    // will deep copy to
+    auto casted_arrow_schema = std::make_unique<ArrowSchema>();
+    casted_arrow_schema->format = strdup("+s");
+    casted_arrow_schema->n_children = arrow_schema->n_children;
+    casted_arrow_schema->dictionary = nullptr;
+    casted_arrow_schema->release = &ArrowAdapter::release_schema;
+    casted_arrow_schema->children = (ArrowSchema**)malloc(
+        arrow_schema->n_children * sizeof(ArrowSchema*));
+
+    auto casted_arrow_array = std::make_unique<ArrowArray>();
+    casted_arrow_array->length = 0;
+    casted_arrow_array->null_count = 0;
+    casted_arrow_array->offset = 0;
+    casted_arrow_array->n_buffers = 0;
+    casted_arrow_array->buffers = nullptr;
+    casted_arrow_array->n_children = arrow_array->n_children;
+    casted_arrow_array->release = &ArrowAdapter::release_array;
+    casted_arrow_array->children = (ArrowArray**)malloc(
+        arrow_array->n_children * sizeof(ArrowArray*));
+
+    // Go through all columns in the ArrowTable and cast the values to what is
+    // in the ArraySchema on disk
+    ArraySchemaEvolution se = _make_se();
+    bool evolve_schema = false;
+    for (auto i = 0; i < arrow_schema->n_children; ++i) {
+        auto orig_arrow_sch_ = arrow_schema->children[i];
+        auto orig_arrow_arr_ = arrow_array->children[i];
+        auto new_arrow_sch_ = casted_arrow_schema
+                                  ->children[i] = new ArrowSchema;
+        auto new_arrow_arr_ = casted_arrow_array->children[i] = new ArrowArray;
+
+        bool enmr_extended = SOMAArray::_create_and_cast_column(
+            orig_arrow_sch_,
+            orig_arrow_arr_,
+            new_arrow_sch_,
+            new_arrow_arr_,
+            se);
+        evolve_schema = evolve_schema || enmr_extended;
+    }
+    if (evolve_schema) {
+        se.array_evolve(uri_);
     }
 
-    // Load fragment info
-    FragmentInfo fragment_info(*ctx_->tiledb_ctx(), uri_);
-    fragment_info.load();
+    return ArrowTable(
+        std::move(casted_arrow_array), std::move(casted_arrow_schema));
+}
 
-    LOG_DEBUG(fmt::format("[SOMAArray] Fragment info for array '{}'", uri_));
-    if (LOG_DEBUG_ENABLED()) {
-        fragment_info.dump();
+bool SOMAArray::_create_and_cast_column(
+    ArrowSchema* orig_column_schema,
+    ArrowArray* orig_column_array,
+    ArrowSchema* new_column_schema,
+    ArrowArray* new_column_array,
+    ArraySchemaEvolution se) {
+    std::string column_name(orig_column_schema->name);
+
+    std::optional<std::string> enmr_name = std::nullopt;
+    if (tiledb_schema()->has_attribute(column_name)) {
+        auto attr = tiledb_schema()->attribute(column_name);
+        enmr_name = AttributeExperimental::get_enumeration_name(
+            *ctx_->tiledb_ctx(), attr);
     }
 
-    // Find the subset of fragments contained within the read timestamp range
-    // [if any]
-    std::vector<uint32_t> relevant_fragments;
-    for (uint32_t fid = 0; fid < fragment_info.fragment_num(); fid++) {
-        auto frag_ts = fragment_info.timestamp_range(fid);
-        assert(frag_ts.first <= frag_ts.second);
-        if (timestamp_) {
-            if (frag_ts.first > timestamp_->second ||
-                frag_ts.second < timestamp_->first) {
-                // fragment is fully outside the read timestamp range: skip it
-                continue;
-            } else if (!(frag_ts.first >= timestamp_->first &&
-                         frag_ts.second <= timestamp_->second)) {
-                // fragment overlaps read timestamp range, but isn't fully
-                // contained within: fall back to count_cells to sort that out.
-                return nnz_slow();
-            }
+    SOMAArray::_create_column(
+        orig_column_schema,
+        orig_column_array,
+        new_column_schema,
+        new_column_array);
+
+    // if the attribute is not enumerated, but the provided column is, then we
+    // need to map the indexes to the correct value
+    if (!enmr_name.has_value() && orig_column_schema->dictionary != nullptr) {
+        SOMAArray::_promote_indexes_to_values(
+            orig_column_schema, orig_column_array, new_column_array);
+    } else {
+        SOMAArray::_cast_column(
+            orig_column_schema,
+            orig_column_array,
+            new_column_schema,
+            new_column_array);
+    }
+
+    // if the attribute is enumerated, ensure that the index values also
+    // match is in the ArraySchema on disk
+    if (enmr_name.has_value()) {
+        auto value_schema = new_column_schema->dictionary;
+        auto value_array = new_column_array->dictionary;
+        auto index_schema = new_column_schema;
+        auto index_array = new_column_array;
+
+        if (value_array == nullptr) {
+            throw std::invalid_argument(fmt::format(
+                "[SOMAArray] {} requires dictionary entry", column_name));
         }
-        // fall through: fragment is fully contained within the read timestamp
-        // range
-        relevant_fragments.push_back(fid);
 
-        // If any relevant fragment is a consolidated fragment, fall back to
-        // counting cells, because the fragment may contain duplicates.
-        // If the application is allowing duplicates (in which case it's the
-        // application's job to otherwise ensure uniqueness), then
-        // sum-over-fragments is the right thing to do.
-        if (!mq_->schema()->allows_dups() && frag_ts.first != frag_ts.second) {
-            return nnz_slow();
-        }
+        return _extend_enumeration(
+            value_schema, value_array, index_schema, index_array, se);
+    }
+    return false;
+}
+
+void SOMAArray::_create_column(
+    ArrowSchema* orig_column_schema,
+    ArrowArray* orig_column_array,
+    ArrowSchema* new_column_schema,
+    ArrowArray* new_column_array) {
+    std::string name(orig_column_schema->name);
+    tiledb_datatype_t disk_type;
+    if (tiledb_schema()->has_attribute(name)) {
+        disk_type = tiledb_schema()->attribute(name).type();
+    } else {
+        disk_type = tiledb_schema()->domain().dimension(name).type();
     }
 
-    auto fragment_count = relevant_fragments.size();
+    // Create the new ArrowSchema and ArrowArray for the column
+    new_column_schema->format = strdup(
+        ArrowAdapter::to_arrow_format(disk_type).data());
+    new_column_schema->name = strdup(orig_column_schema->name);
+    new_column_schema->n_children = orig_column_schema->n_children;
+    new_column_schema->release = &ArrowAdapter::release_schema;
+    new_column_schema->children = (ArrowSchema**)malloc(
+        orig_column_schema->n_children * sizeof(ArrowSchema*));
+    new_column_schema->dictionary = orig_column_schema->dictionary;
 
-    if (fragment_count == 0) {
-        // No data have been written [in the read timestamp range]
-        return 0;
+    new_column_array->length = orig_column_array->length;
+    new_column_array->null_count = orig_column_array->null_count;
+    new_column_array->offset = 0;
+    new_column_array->n_buffers = orig_column_array->n_buffers;
+    new_column_array->buffers = new const void*[orig_column_array->n_buffers];
+    new_column_array->n_children = orig_column_array->n_children;
+    new_column_array->release = &ArrowAdapter::release_array;
+    new_column_array->children = (ArrowArray**)malloc(
+        orig_column_array->n_children * sizeof(ArrowArray*));
+    new_column_array->dictionary = orig_column_array->dictionary;
+}
+
+void SOMAArray::_cast_column(
+    ArrowSchema* orig_column_schema,
+    ArrowArray* orig_column_array,
+    ArrowSchema* new_column_schema,
+    ArrowArray* new_column_array) {
+    tiledb_datatype_t user_type = ArrowAdapter::to_tiledb_format(
+        orig_column_schema->format);
+
+    // Cast values and deep copy to the newly created column
+    switch (user_type) {
+        case TILEDB_STRING_ASCII:
+        case TILEDB_STRING_UTF8:
+        case TILEDB_CHAR:
+            return SOMAArray::_cast_column_aux<std::string>(
+                orig_column_schema,
+                orig_column_array,
+                new_column_schema,
+                new_column_array);
+        case TILEDB_BOOL:
+            return SOMAArray::_cast_column_aux<bool>(
+                orig_column_schema,
+                orig_column_array,
+                new_column_schema,
+                new_column_array);
+        case TILEDB_INT8:
+            return SOMAArray::_cast_column_aux<int8_t>(
+                orig_column_schema,
+                orig_column_array,
+                new_column_schema,
+                new_column_array);
+        case TILEDB_UINT8:
+            return SOMAArray::_cast_column_aux<uint8_t>(
+                orig_column_schema,
+                orig_column_array,
+                new_column_schema,
+                new_column_array);
+        case TILEDB_INT16:
+            return SOMAArray::_cast_column_aux<int16_t>(
+                orig_column_schema,
+                orig_column_array,
+                new_column_schema,
+                new_column_array);
+        case TILEDB_UINT16:
+            return SOMAArray::_cast_column_aux<uint16_t>(
+                orig_column_schema,
+                orig_column_array,
+                new_column_schema,
+                new_column_array);
+        case TILEDB_INT32:
+            return SOMAArray::_cast_column_aux<int32_t>(
+                orig_column_schema,
+                orig_column_array,
+                new_column_schema,
+                new_column_array);
+        case TILEDB_UINT32:
+            return SOMAArray::_cast_column_aux<uint32_t>(
+                orig_column_schema,
+                orig_column_array,
+                new_column_schema,
+                new_column_array);
+        case TILEDB_INT64:
+        case TILEDB_DATETIME_YEAR:
+        case TILEDB_DATETIME_MONTH:
+        case TILEDB_DATETIME_WEEK:
+        case TILEDB_DATETIME_DAY:
+        case TILEDB_DATETIME_HR:
+        case TILEDB_DATETIME_MIN:
+        case TILEDB_DATETIME_SEC:
+        case TILEDB_DATETIME_MS:
+        case TILEDB_DATETIME_US:
+        case TILEDB_DATETIME_NS:
+        case TILEDB_DATETIME_PS:
+        case TILEDB_DATETIME_FS:
+        case TILEDB_DATETIME_AS:
+        case TILEDB_TIME_HR:
+        case TILEDB_TIME_MIN:
+        case TILEDB_TIME_SEC:
+        case TILEDB_TIME_MS:
+        case TILEDB_TIME_US:
+        case TILEDB_TIME_NS:
+        case TILEDB_TIME_PS:
+        case TILEDB_TIME_FS:
+        case TILEDB_TIME_AS:
+            return SOMAArray::_cast_column_aux<int64_t>(
+                orig_column_schema,
+                orig_column_array,
+                new_column_schema,
+                new_column_array);
+        case TILEDB_UINT64:
+            return SOMAArray::_cast_column_aux<uint64_t>(
+                orig_column_schema,
+                orig_column_array,
+                new_column_schema,
+                new_column_array);
+        case TILEDB_FLOAT32:
+            return SOMAArray::_cast_column_aux<float>(
+                orig_column_schema,
+                orig_column_array,
+                new_column_schema,
+                new_column_array);
+        case TILEDB_FLOAT64:
+            return SOMAArray::_cast_column_aux<double>(
+                orig_column_schema,
+                orig_column_array,
+                new_column_schema,
+                new_column_array);
+        default:
+            throw TileDBSOMAError(fmt::format(
+                "Saw invalid TileDB user type when attempting to "
+                "cast table: {}",
+                tiledb::impl::type_to_str(user_type)));
+    }
+}
+
+template <typename UserType>
+void SOMAArray::_cast_column_aux(
+    ArrowSchema* orig_column_schema,
+    ArrowArray* orig_column_array,
+    ArrowSchema* new_column_schema,
+    ArrowArray* new_column_array) {
+    (void)new_column_schema;  // unused
+
+    tiledb_datatype_t disk_type;
+    std::string name(orig_column_schema->name);
+    if (tiledb_schema()->has_attribute(name)) {
+        disk_type = tiledb_schema()->attribute(name).type();
+    } else {
+        disk_type = tiledb_schema()->domain().dimension(name).type();
     }
 
-    if (fragment_count == 1) {
-        // Only one fragment; return its cell_num
-        return fragment_info.cell_num(relevant_fragments[0]);
-    }
-
-    // Check for overlapping fragments on the first dimension and
-    // compute total_cell_num while going through the loop
-    uint64_t total_cell_num = 0;
-    std::vector<std::array<uint64_t, 2>> non_empty_domains(fragment_count);
-    for (uint32_t i = 0; i < fragment_count; i++) {
-        // TODO[perf]: Reading fragment info is not supported on TileDB Cloud
-        // yet, but reading one fragment at a time will be slow. Is there
-        // another way?
-        total_cell_num += fragment_info.cell_num(relevant_fragments[i]);
-        fragment_info.get_non_empty_domain(
-            relevant_fragments[i], 0, &non_empty_domains[i]);
-        LOG_DEBUG(fmt::format(
-            "[SOMAArray] fragment {} non-empty domain = [{}, {}]",
-            i,
-            non_empty_domains[i][0],
-            non_empty_domains[i][1]));
-    }
-
-    // Sort non-empty domains by the start of their ranges
-    std::sort(non_empty_domains.begin(), non_empty_domains.end());
-
-    // After sorting, if the end of a non-empty domain is >= the beginning of
-    // the next non-empty domain, there is an overlap
-    bool overlap = false;
-    for (uint32_t i = 0; i < fragment_count - 1; i++) {
-        LOG_DEBUG(fmt::format(
-            "[SOMAArray] Checking {} < {}",
-            non_empty_domains[i][1],
-            non_empty_domains[i + 1][0]));
-        if (non_empty_domains[i][1] >= non_empty_domains[i + 1][0]) {
-            overlap = true;
+    switch (disk_type) {
+        case TILEDB_STRING_ASCII:
+        case TILEDB_STRING_UTF8:
+        case TILEDB_CHAR:
             break;
+        case TILEDB_BOOL:
+        case TILEDB_INT8:
+            return SOMAArray::_copy_column<UserType, int8_t>(
+                orig_column_array, new_column_array);
+        case TILEDB_UINT8:
+            return SOMAArray::_copy_column<UserType, uint8_t>(
+                orig_column_array, new_column_array);
+        case TILEDB_INT16:
+            return SOMAArray::_copy_column<UserType, int16_t>(
+                orig_column_array, new_column_array);
+        case TILEDB_UINT16:
+            return SOMAArray::_copy_column<UserType, uint16_t>(
+                orig_column_array, new_column_array);
+        case TILEDB_INT32:
+            return SOMAArray::_copy_column<UserType, int32_t>(
+                orig_column_array, new_column_array);
+        case TILEDB_UINT32:
+            return SOMAArray::_copy_column<UserType, uint32_t>(
+                orig_column_array, new_column_array);
+        case TILEDB_INT64:
+        case TILEDB_DATETIME_YEAR:
+        case TILEDB_DATETIME_MONTH:
+        case TILEDB_DATETIME_WEEK:
+        case TILEDB_DATETIME_DAY:
+        case TILEDB_DATETIME_HR:
+        case TILEDB_DATETIME_MIN:
+        case TILEDB_DATETIME_SEC:
+        case TILEDB_DATETIME_MS:
+        case TILEDB_DATETIME_US:
+        case TILEDB_DATETIME_NS:
+        case TILEDB_DATETIME_PS:
+        case TILEDB_DATETIME_FS:
+        case TILEDB_DATETIME_AS:
+        case TILEDB_TIME_HR:
+        case TILEDB_TIME_MIN:
+        case TILEDB_TIME_SEC:
+        case TILEDB_TIME_MS:
+        case TILEDB_TIME_US:
+        case TILEDB_TIME_NS:
+        case TILEDB_TIME_PS:
+        case TILEDB_TIME_FS:
+        case TILEDB_TIME_AS:
+            return SOMAArray::_copy_column<UserType, int64_t>(
+                orig_column_array, new_column_array);
+        case TILEDB_UINT64:
+            return SOMAArray::_copy_column<UserType, uint64_t>(
+                orig_column_array, new_column_array);
+        case TILEDB_FLOAT32:
+            return SOMAArray::_copy_column<UserType, float>(
+                orig_column_array, new_column_array);
+        case TILEDB_FLOAT64:
+            return SOMAArray::_copy_column<UserType, double>(
+                orig_column_array, new_column_array);
+        default:
+            throw TileDBSOMAError(
+                "Saw invalid TileDB disk type when attempting to cast "
+                "table: " +
+                tiledb::impl::type_to_str(disk_type));
+    }
+}
+
+template <>
+void SOMAArray::_cast_column_aux<std::string>(
+    ArrowSchema* orig_column_schema,
+    ArrowArray* orig_column_array,
+    ArrowSchema* new_column_schema,
+    ArrowArray* new_column_array) {
+    (void)new_column_schema;   // unused
+    (void)orig_column_schema;  // unused
+
+    std::vector<uint64_t> offsets_v;
+    if ((strcmp(orig_column_schema->format, "U") == 0) ||
+        (strcmp(orig_column_schema->format, "Z") == 0)) {
+        uint64_t* offsets = (uint64_t*)orig_column_array->buffers[1];
+        offsets_v.resize(orig_column_array->length + 1);
+        offsets_v.assign(offsets, offsets + orig_column_array->length + 1);
+    } else {
+        uint32_t* offsets = (uint32_t*)orig_column_array->buffers[1];
+        std::vector<uint32_t> offset_holder(
+            offsets, offsets + orig_column_array->length + 1);
+        for (auto offset : offset_holder) {
+            offsets_v.push_back((uint64_t)offset);
         }
     }
 
-    // If relevant fragments do not overlap, return the total cell_num
-    if (!overlap) {
-        return total_cell_num;
-    }
-    // Found relevant fragments with overlap, count cells
-    return nnz_slow();
+    new_column_array->buffers[0] = orig_column_array->buffers[0];
+
+    new_column_array->buffers[1] = malloc(sizeof(uint64_t) * offsets_v.size());
+    std::memcpy(
+        (void*)new_column_array->buffers[1],
+        offsets_v.data(),
+        sizeof(uint64_t) * offsets_v.size());
+
+    new_column_array->buffers[2] = malloc(sizeof(char) * offsets_v.back());
+    std::memcpy(
+        (void*)new_column_array->buffers[2],
+        orig_column_array->buffers[2],
+        sizeof(char) * offsets_v.back());
 }
 
-uint64_t SOMAArray::nnz_slow() {
-    LOG_DEBUG(
-        "[SOMAArray] nnz() found consolidated or overlapping fragments, "
-        "counting cells...");
+template <>
+void SOMAArray::_cast_column_aux<bool>(
+    ArrowSchema* orig_column_schema,
+    ArrowArray* orig_column_array,
+    ArrowSchema* new_column_schema,
+    ArrowArray* new_column_array) {
+    (void)orig_column_schema;  // unused
 
-    auto sr = SOMAArray::open(
-        OpenMode::read,
-        uri_,
-        ctx_,
-        "count_cells",
-        {mq_->schema()->domain().dimension(0).name()},
-        batch_size_,
-        result_order_,
-        timestamp_);
+    new_column_array->buffers[0] = orig_column_array->buffers[0];
+    auto sz = orig_column_array->length +
+              (orig_column_array->length % 8 == 0 ? 0 : 1);
 
-    uint64_t total_cell_num = 0;
-    while (auto batch = sr->read_next()) {
-        total_cell_num += (*batch)->num_rows();
+    if (orig_column_array->n_buffers == 3) {
+        new_column_array->buffers[2] = malloc(sz);
+        std::memcpy(
+            (void*)new_column_array->buffers[2],
+            orig_column_array->buffers[2],
+            sz);
+    } else {
+        new_column_array->buffers[1] = malloc(sz);
+        std::memcpy(
+            (void*)new_column_array->buffers[1],
+            orig_column_array->buffers[1],
+            sz);
     }
 
-    return total_cell_num;
+    _cast_bit_to_uint8(new_column_schema, new_column_array);
 }
 
-std::vector<int64_t> SOMAArray::shape() {
-    std::vector<int64_t> result;
-    auto dimensions = mq_->schema()->domain().dimensions();
+template <typename T>
+void SOMAArray::_cast_dictionary_values(
+    ArrowSchema* orig_column_schema,
+    ArrowArray* orig_column_array,
+    ArrowArray* new_column_array) {
+    auto value_array = orig_column_array->dictionary;
 
-    for (const auto& dim : dimensions) {
-        switch (dim.type()) {
-            case TILEDB_UINT8:
-                result.push_back(
-                    dim.domain<uint8_t>().second - dim.domain<uint8_t>().first +
-                    1);
-                break;
-            case TILEDB_INT8:
-                result.push_back(
-                    dim.domain<int8_t>().second - dim.domain<int8_t>().first +
-                    1);
-                break;
-            case TILEDB_UINT16:
-                result.push_back(
-                    dim.domain<uint16_t>().second -
-                    dim.domain<uint16_t>().first + 1);
-                break;
-            case TILEDB_INT16:
-                result.push_back(
-                    dim.domain<int16_t>().second - dim.domain<int16_t>().first +
-                    1);
-                break;
-            case TILEDB_UINT32:
-                result.push_back(
-                    dim.domain<uint32_t>().second -
-                    dim.domain<uint32_t>().first + 1);
-                break;
-            case TILEDB_INT32:
-                result.push_back(
-                    dim.domain<int32_t>().second - dim.domain<int32_t>().first +
-                    1);
-                break;
-            case TILEDB_UINT64:
-                result.push_back(
-                    dim.domain<uint64_t>().second -
-                    dim.domain<uint64_t>().first + 1);
-                break;
-            case TILEDB_INT64:
-            case TILEDB_DATETIME_YEAR:
-            case TILEDB_DATETIME_MONTH:
-            case TILEDB_DATETIME_WEEK:
-            case TILEDB_DATETIME_DAY:
-            case TILEDB_DATETIME_HR:
-            case TILEDB_DATETIME_MIN:
-            case TILEDB_DATETIME_SEC:
-            case TILEDB_DATETIME_MS:
-            case TILEDB_DATETIME_US:
-            case TILEDB_DATETIME_NS:
-            case TILEDB_DATETIME_PS:
-            case TILEDB_DATETIME_FS:
-            case TILEDB_DATETIME_AS:
-            case TILEDB_TIME_HR:
-            case TILEDB_TIME_MIN:
-            case TILEDB_TIME_SEC:
-            case TILEDB_TIME_MS:
-            case TILEDB_TIME_US:
-            case TILEDB_TIME_NS:
-            case TILEDB_TIME_PS:
-            case TILEDB_TIME_FS:
-            case TILEDB_TIME_AS:
-                result.push_back(
-                    dim.domain<int64_t>().second - dim.domain<int64_t>().first +
-                    1);
-                break;
-            default:
-                throw TileDBSOMAError("Dimension must be integer type.");
+    T* valbuf;
+    if (value_array->n_buffers == 3) {
+        valbuf = (T*)value_array->buffers[2];
+    } else {
+        valbuf = (T*)value_array->buffers[1];
+    }
+    std::vector<T> values(valbuf, valbuf + value_array->length);
+
+    std::vector<int64_t> indexes = SOMAArray::_get_index_vector(
+        orig_column_schema, orig_column_array);
+
+    std::vector<T> index_to_value;
+    for (auto i : indexes) {
+        index_to_value.push_back(values[i]);
+    }
+
+    new_column_array->buffers[0] = orig_column_array->buffers[0];
+
+    if (value_array->n_buffers == 3) {
+        new_column_array->buffers[2] = malloc(
+            sizeof(T) * index_to_value.size());
+        std::memcpy(
+            (void*)new_column_array->buffers[2],
+            index_to_value.data(),
+            sizeof(T) * index_to_value.size());
+    } else {
+        new_column_array->buffers[1] = malloc(
+            sizeof(T) * index_to_value.size());
+        std::memcpy(
+            (void*)new_column_array->buffers[1],
+            index_to_value.data(),
+            sizeof(T) * index_to_value.size());
+    }
+}
+
+void SOMAArray::_cast_bit_to_uint8(
+    ArrowSchema* arrow_schema, ArrowArray* arrow_array) {
+    const void* data;
+    if (arrow_array->n_buffers == 3) {
+        data = arrow_array->buffers[2];
+    } else {
+        data = arrow_array->buffers[1];
+    }
+
+    auto sz = arrow_array->length;
+
+    std::vector<uint8_t> casted;
+    for (int64_t i = 0; i * 8 < sz; ++i) {
+        uint8_t byte = ((uint8_t*)data)[i];
+        for (int64_t j = 0; j < 8; ++j) {
+            casted.push_back((uint8_t)((byte >> j) & 0x01));
         }
     }
 
-    return result;
+    arrow_schema->format = "C";
+    if (arrow_array->n_buffers == 3) {
+        arrow_array->buffers[2] = malloc(sizeof(uint8_t) * sz);
+        std::memcpy(
+            (void*)arrow_array->buffers[2],
+            casted.data(),
+            sizeof(uint8_t) * sz);
+    } else {
+        arrow_array->buffers[1] = malloc(sizeof(uint8_t) * sz);
+        std::memcpy(
+            (void*)arrow_array->buffers[1],
+            casted.data(),
+            sizeof(uint8_t) * sz);
+    }
 }
 
 uint64_t SOMAArray::ndim() const {
@@ -725,6 +1231,24 @@ std::vector<std::string> SOMAArray::dimension_names() const {
         result.push_back(dim.name());
     }
     return result;
+}
+
+void SOMAArray::write(bool sort_coords) {
+    if (mq_->query_type() != TILEDB_WRITE) {
+        throw TileDBSOMAError("[SOMAArray] array must be opened in write mode");
+    }
+    mq_->submit_write(sort_coords);
+
+    mq_->reset();
+}
+
+void SOMAArray::consolidate_and_vacuum(std::vector<std::string> modes) {
+    for (auto mode : modes) {
+        auto cfg = ctx_->tiledb_ctx()->config();
+        cfg["sm.consolidation.mode"] = mode;
+        Array::consolidate(Context(cfg), uri_);
+        Array::vacuum(Context(cfg), uri_);
+    }
 }
 
 std::map<std::string, Enumeration> SOMAArray::get_attr_to_enum_mapping() {
@@ -756,11 +1280,12 @@ void SOMAArray::set_metadata(
     const std::string& key,
     tiledb_datatype_t value_type,
     uint32_t value_num,
-    const void* value) {
-    if (key.compare(SOMA_OBJECT_TYPE_KEY) == 0)
+    const void* value,
+    bool force) {
+    if (!force && key.compare(SOMA_OBJECT_TYPE_KEY) == 0)
         throw TileDBSOMAError(SOMA_OBJECT_TYPE_KEY + " cannot be modified.");
 
-    if (key.compare(ENCODING_VERSION_KEY) == 0)
+    if (!force && key.compare(ENCODING_VERSION_KEY) == 0)
         throw TileDBSOMAError(ENCODING_VERSION_KEY + " cannot be modified.");
 
     arr_->put_metadata(key, value_type, value_num, value);
@@ -834,6 +1359,369 @@ void SOMAArray::validate(
 
 std::optional<TimestampRange> SOMAArray::timestamp() {
     return timestamp_;
+}
+
+uint64_t SOMAArray::nnz() {
+    // Verify array is sparse
+    if (mq_->schema()->array_type() != TILEDB_SPARSE) {
+        throw TileDBSOMAError(
+            "[SOMAArray] nnz is only supported for sparse arrays");
+    }
+
+    // Load fragment info
+    FragmentInfo fragment_info(*ctx_->tiledb_ctx(), uri_);
+    fragment_info.load();
+
+    LOG_DEBUG(fmt::format("[SOMAArray] Fragment info for array '{}'", uri_));
+    if (LOG_DEBUG_ENABLED()) {
+        fragment_info.dump();
+    }
+
+    // Find the subset of fragments contained within the read timestamp range
+    // [if any]
+    std::vector<uint32_t> relevant_fragments;
+    for (uint32_t fid = 0; fid < fragment_info.fragment_num(); fid++) {
+        auto frag_ts = fragment_info.timestamp_range(fid);
+        assert(frag_ts.first <= frag_ts.second);
+        if (timestamp_) {
+            if (frag_ts.first > timestamp_->second ||
+                frag_ts.second < timestamp_->first) {
+                // fragment is fully outside the read timestamp range: skip it
+                continue;
+            } else if (!(frag_ts.first >= timestamp_->first &&
+                         frag_ts.second <= timestamp_->second)) {
+                // fragment overlaps read timestamp range, but isn't fully
+                // contained within: fall back to count_cells to sort that out.
+                return _nnz_slow();
+            }
+        }
+        // fall through: fragment is fully contained within the read timestamp
+        // range
+        relevant_fragments.push_back(fid);
+
+        // If any relevant fragment is a consolidated fragment, fall back to
+        // counting cells, because the fragment may contain duplicates.
+        // If the application is allowing duplicates (in which case it's the
+        // application's job to otherwise ensure uniqueness), then
+        // sum-over-fragments is the right thing to do.
+        if (!mq_->schema()->allows_dups() && frag_ts.first != frag_ts.second) {
+            return _nnz_slow();
+        }
+    }
+
+    auto fragment_count = relevant_fragments.size();
+
+    if (fragment_count == 0) {
+        // No data have been written [in the read timestamp range]
+        return 0;
+    }
+
+    if (fragment_count == 1) {
+        // Only one fragment; return its cell_num
+        return fragment_info.cell_num(relevant_fragments[0]);
+    }
+
+    // Check for overlapping fragments on the first dimension and
+    // compute total_cell_num while going through the loop
+    uint64_t total_cell_num = 0;
+    std::vector<std::array<uint64_t, 2>> non_empty_domains(fragment_count);
+    for (uint32_t i = 0; i < fragment_count; i++) {
+        // TODO[perf]: Reading fragment info is not supported on TileDB Cloud
+        // yet, but reading one fragment at a time will be slow. Is there
+        // another way?
+        total_cell_num += fragment_info.cell_num(relevant_fragments[i]);
+        fragment_info.get_non_empty_domain(
+            relevant_fragments[i], 0, &non_empty_domains[i]);
+        LOG_DEBUG(fmt::format(
+            "[SOMAArray] fragment {} non-empty domain = [{}, {}]",
+            i,
+            non_empty_domains[i][0],
+            non_empty_domains[i][1]));
+    }
+
+    // Sort non-empty domains by the start of their ranges
+    std::sort(non_empty_domains.begin(), non_empty_domains.end());
+
+    // After sorting, if the end of a non-empty domain is >= the beginning of
+    // the next non-empty domain, there is an overlap
+    bool overlap = false;
+    for (uint32_t i = 0; i < fragment_count - 1; i++) {
+        LOG_DEBUG(fmt::format(
+            "[SOMAArray] Checking {} < {}",
+            non_empty_domains[i][1],
+            non_empty_domains[i + 1][0]));
+        if (non_empty_domains[i][1] >= non_empty_domains[i + 1][0]) {
+            overlap = true;
+            break;
+        }
+    }
+
+    // If relevant fragments do not overlap, return the total cell_num
+    if (!overlap) {
+        return total_cell_num;
+    }
+    // Found relevant fragments with overlap, count cells
+    return _nnz_slow();
+}
+
+uint64_t SOMAArray::_nnz_slow() {
+    LOG_DEBUG(
+        "[SOMAArray] nnz() found consolidated or overlapping fragments, "
+        "counting cells...");
+
+    auto sr = SOMAArray::open(
+        OpenMode::read,
+        uri_,
+        ctx_,
+        "count_cells",
+        {mq_->schema()->domain().dimension(0).name()},
+        batch_size_,
+        result_order_,
+        timestamp_);
+
+    uint64_t total_cell_num = 0;
+    while (auto batch = sr->read_next()) {
+        total_cell_num += (*batch)->num_rows();
+    }
+
+    return total_cell_num;
+}
+
+std::vector<int64_t> SOMAArray::shape() {
+    // There are two reasons for this:
+    // * Transitional, non-monolithic, phased, careful development for the
+    //   new-shape feature
+    // * Even after the new-shape feature is fully released, there will be old
+    //   arrays on disk that were created before this feature existed.
+    // So this is long-term code.
+    return _get_current_domain().is_empty() ? _tiledb_domain() :
+                                              _tiledb_current_domain();
+}
+
+std::vector<int64_t> SOMAArray::maxshape() {
+    return _tiledb_domain();
+}
+
+void SOMAArray::resize(const std::vector<int64_t>& newshape) {
+    if (_get_current_domain().is_empty()) {
+        throw TileDBSOMAError(
+            "[SOMAArray::resize] array must already have a shape");
+    }
+    _set_current_domain_from_shape(newshape);
+}
+
+void SOMAArray::upgrade_shape(const std::vector<int64_t>& newshape) {
+    if (!_get_current_domain().is_empty()) {
+        throw TileDBSOMAError(
+            "[SOMAArray::resize] array must not already have a shape");
+    }
+    _set_current_domain_from_shape(newshape);
+}
+
+void SOMAArray::_set_current_domain_from_shape(
+    const std::vector<int64_t>& newshape) {
+    if (mq_->query_type() != TILEDB_WRITE) {
+        throw TileDBSOMAError(
+            "[SOMAArray::resize] array must be opened in write mode");
+    }
+
+    // Variant-indexed dataframes must use a separate path
+    _check_dims_are_int64();
+
+    if (_get_current_domain().is_empty()) {
+        throw TileDBSOMAError(
+            "[SOMAArray::resize] array must already be sized");
+    }
+
+    auto tctx = ctx_->tiledb_ctx();
+    ArraySchema schema = arr_->schema();
+    Domain domain = schema.domain();
+    ArraySchemaEvolution schema_evolution(*tctx);
+    CurrentDomain new_current_domain(*tctx);
+
+    NDRectangle ndrect(*tctx, domain);
+
+    unsigned n = domain.ndim();
+    if ((unsigned)newshape.size() != n) {
+        throw TileDBSOMAError(fmt::format(
+            "[SOMAArray::resize]: newshape has dimension count {}; array has "
+            "{} ",
+            newshape.size(),
+            n));
+    }
+
+    for (unsigned i = 0; i < n; i++) {
+        ndrect.set_range<int64_t>(
+            domain.dimension(i).name(), 0, newshape[i] - 1);
+    }
+
+    new_current_domain.set_ndrectangle(ndrect);
+    schema_evolution.expand_current_domain(new_current_domain);
+    schema_evolution.array_evolve(uri_);
+}
+
+void SOMAArray::maybe_resize_soma_joinid(const std::vector<int64_t>& newshape) {
+    if (mq_->query_type() != TILEDB_WRITE) {
+        throw TileDBSOMAError(
+            "[SOMAArray::resize] array must be opened in write mode");
+    }
+
+    ArraySchema schema = arr_->schema();
+    Domain domain = schema.domain();
+    unsigned ndim = domain.ndim();
+    if (newshape.size() != 1) {
+        throw TileDBSOMAError(fmt::format(
+            "[SOMAArray::resize]: newshape has dimension count {}; needed 1",
+            newshape.size(),
+            ndim));
+    }
+
+    auto tctx = ctx_->tiledb_ctx();
+    CurrentDomain old_current_domain = ArraySchemaExperimental::current_domain(
+        *tctx, schema);
+    NDRectangle ndrect = old_current_domain.ndrectangle();
+
+    CurrentDomain new_current_domain(*tctx);
+    ArraySchemaEvolution schema_evolution(*tctx);
+
+    for (unsigned i = 0; i < ndim; i++) {
+        if (domain.dimension(i).name() == "soma_joinid") {
+            ndrect.set_range<int64_t>(
+                domain.dimension(i).name(), 0, newshape[0] - 1);
+        }
+    }
+
+    new_current_domain.set_ndrectangle(ndrect);
+    schema_evolution.expand_current_domain(new_current_domain);
+    schema_evolution.array_evolve(uri_);
+}
+
+std::vector<int64_t> SOMAArray::_tiledb_current_domain() {
+    // Variant-indexed dataframes must use a separate path
+    _check_dims_are_int64();
+
+    std::vector<int64_t> result;
+
+    auto current_domain = tiledb::ArraySchemaExperimental::current_domain(
+        *ctx_->tiledb_ctx(), arr_->schema());
+
+    if (current_domain.is_empty()) {
+        throw TileDBSOMAError(
+            "Internal error: current domain requested for an array which does "
+            "not support it");
+    }
+
+    auto t = current_domain.type();
+    if (t != TILEDB_NDRECTANGLE) {
+        throw TileDBSOMAError("current_domain type is not NDRECTANGLE");
+    }
+
+    NDRectangle ndrect = current_domain.ndrectangle();
+
+    for (auto dimension_name : dimension_names()) {
+        auto range = ndrect.range<int64_t>(dimension_name);
+        result.push_back(range[1] + 1);
+    }
+    return result;
+}
+
+std::vector<int64_t> SOMAArray::_tiledb_domain() {
+    // Variant-indexed dataframes must use a separate path
+    _check_dims_are_int64();
+
+    std::vector<int64_t> result;
+    auto dimensions = mq_->schema()->domain().dimensions();
+
+    for (const auto& dim : dimensions) {
+        result.push_back(
+            dim.domain<int64_t>().second - dim.domain<int64_t>().first + 1);
+    }
+
+    return result;
+}
+
+std::optional<int64_t> SOMAArray::_maybe_soma_joinid_shape() {
+    return _get_current_domain().is_empty() ?
+               _maybe_soma_joinid_tiledb_domain() :
+               _maybe_soma_joinid_tiledb_current_domain();
+}
+
+std::optional<int64_t> SOMAArray::_maybe_soma_joinid_maxshape() {
+    return _maybe_soma_joinid_tiledb_domain();
+}
+
+std::optional<int64_t> SOMAArray::_maybe_soma_joinid_tiledb_current_domain() {
+    const std::string dim_name = "soma_joinid";
+
+    auto dom = arr_->schema().domain();
+    if (!dom.has_dimension(dim_name)) {
+        return std::nullopt;
+    }
+
+    auto current_domain = _get_current_domain();
+    if (current_domain.is_empty()) {
+        throw TileDBSOMAError("internal coding error");
+    }
+
+    auto t = current_domain.type();
+    if (t != TILEDB_NDRECTANGLE) {
+        throw TileDBSOMAError("current_domain type is not NDRECTANGLE");
+    }
+
+    NDRectangle ndrect = current_domain.ndrectangle();
+
+    auto dim = dom.dimension(dim_name);
+    if (dim.type() != TILEDB_INT64) {
+        throw TileDBSOMAError(fmt::format(
+            "expected {} dim to be {}; got {}",
+            dim_name,
+            tiledb::impl::type_to_str(TILEDB_INT64),
+            tiledb::impl::type_to_str(dim.type())));
+    }
+
+    auto range = ndrect.range<int64_t>(dim_name);
+    auto max = range[1] + 1;
+    return std::optional<int64_t>(max);
+}
+
+std::optional<int64_t> SOMAArray::_maybe_soma_joinid_tiledb_domain() {
+    const std::string dim_name = "soma_joinid";
+
+    auto dom = arr_->schema().domain();
+    if (!dom.has_dimension(dim_name)) {
+        return std::nullopt;
+    }
+
+    auto dim = dom.dimension(dim_name);
+    if (dim.type() != TILEDB_INT64) {
+        throw TileDBSOMAError(fmt::format(
+            "expected {} dim to be {}; got {}",
+            dim_name,
+            tiledb::impl::type_to_str(TILEDB_INT64),
+            tiledb::impl::type_to_str(dim.type())));
+    }
+
+    auto max = dim.domain<int64_t>().second + 1;
+
+    return std::optional<int64_t>(max);
+}
+
+bool SOMAArray::_dims_are_int64() {
+    ArraySchema schema = arr_->schema();
+    Domain domain = schema.domain();
+    for (auto dimension : domain.dimensions()) {
+        if (dimension.type() != TILEDB_INT64) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void SOMAArray::_check_dims_are_int64() {
+    if (!_dims_are_int64()) {
+        throw TileDBSOMAError(
+            "[SOMAArray] internal coding error: expected all dims to be int64");
+    }
 }
 
 }  // namespace tiledbsoma

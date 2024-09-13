@@ -4,7 +4,7 @@ test_that("Load SeuratComand mechanics", {
   skip_if_not_installed('jsonlite')
 
   pbmc_small <- get_data('pbmc_small', package = 'SeuratObject')
-  uri <- write_soma(pbmc_small, uri = withr::local_tempdir('load-seurat-command'))
+  uri <- write_soma(pbmc_small, uri = tempfile(pattern='load-seurat-command'))
 
   expect_no_condition(exp <- SOMAExperimentOpen(uri))
   on.exit(exp$close(), add = TRUE)
@@ -78,13 +78,13 @@ test_that("Load SeuratComand mechanics", {
 })
 
 test_that("Loading SeuratCommands works from experiment queries", {
-  skip_if(!extended_tests() || covr_tests())
+  skip_if(!extended_tests())
   skip_if_not_installed('SeuratObject', .MINIMUM_SEURAT_VERSION('c'))
   skip_if_not_installed('jsonlite')
 
 
   pbmc_small <- get_data('pbmc_small', package = 'SeuratObject')
-  uri <- write_soma(pbmc_small, uri = withr::local_tempdir('seurat-command-query'))
+  uri <- write_soma(pbmc_small, uri = tempfile(pattern='seurat-command-query'))
 
   expect_no_condition(exp <- SOMAExperimentOpen(uri))
   on.exit(exp$close(), add = TRUE)
@@ -105,15 +105,14 @@ test_that("Loading SeuratCommands works from experiment queries", {
 })
 
 test_that("Load SeuratCommand with missing commands", {
-  skip_if(!extended_tests() || covr_tests())
+  skip_if(!extended_tests())
   skip_if_not_installed('SeuratObject', .MINIMUM_SEURAT_VERSION('c'))
   skip_if_not_installed('jsonlite')
-
 
   pbmc_small <- get_data('pbmc_small', package = 'SeuratObject')
   slot(pbmc_small, "commands") <- list()
   expect_true(validObject(pbmc_small))
-  uri <- write_soma(pbmc_small, uri = withr::local_tempdir('missing-commands'))
+  uri <- write_soma(pbmc_small, uri = tempfile(pattern='missing-commands'))
 
   expect_no_condition(exp <- SOMAExperimentOpen(uri))
   on.exit(exp$close(), add = TRUE)
@@ -126,10 +125,16 @@ test_that("Load SeuratCommand with missing commands", {
     'SOMAExperimentAxisQuery'
   )
 
-  expect_warning(
-    obj <- query$to_seurat(X_layers = c('data' = 'data')),
-    regexp = "^Cannot find a SOMACollection with command logs in 'uns'$"
+  expect_no_condition(obj <- query$to_seurat(X_layers = c('data' = 'data')))
+
+  withr::with_options(
+    list(verbose = TRUE),
+    expect_warning(
+      query$to_seurat(X_layers = c('data' = 'data')),
+      regexp = "^Cannot find a SOMACollection with command logs in 'uns'$"
+    )
   )
+
   expect_s4_class(obj, 'Seurat')
   expect_true(validObject(obj))
   expect_length(SeuratObject::Command(obj), 0L)

@@ -1,7 +1,7 @@
 #' TileDB Group Base Class
 #'
 #' @description
-#' Base class for interacting with TileDB groups (lifecycle: experimental)
+#' Base class for interacting with TileDB groups (lifecycle: maturing)
 #' @importFrom spdl info debug
 #' @keywords internal
 #' @export
@@ -11,7 +11,7 @@ TileDBGroup <- R6::R6Class(
 
   public = list(
 
-    #' @description Print summary of the group. (lifecycle: experimental)
+    #' @description Print summary of the group. (lifecycle: maturing)
     print = function() {
       super$print()
       if (self$exists()) {
@@ -23,7 +23,7 @@ TileDBGroup <- R6::R6Class(
       }
     },
 
-    #' @description Creates the data structure on disk/S3/cloud. (lifecycle: experimental)
+    #' @description Creates the data structure on disk/S3/cloud. (lifecycle: maturing)
     #' @param internal_use_only Character value to signal this is a 'permitted' call,
     #' as `create()` is considered internal and should not be called directly.
     create = function(internal_use_only = NULL) {
@@ -32,10 +32,10 @@ TileDBGroup <- R6::R6Class(
                    "factory method as e.g. 'SOMACollectionCreate()'."), call. = FALSE)
       }
 
-      spdl::info("Creating new {} at '{}'", self$class(), self$uri)
-      tiledb::tiledb_group_create(uri = self$uri, ctx = private$.tiledb_ctx)
-
-      self$open("WRITE", internal_use_only = "allowed_use")
+      spdl::debug("[TileDBGroup$create] Creating new {} at '{}' at {}",
+                  self$class(), self$uri, self$tiledb_timestamp)
+      c_group_create(self$uri, self$class(), private$.soma_context,
+                     self$.tiledb_timestamp_range)  ## FIXME: use to be added accessor
 
       invisible(private$.tiledb_group)
     },
@@ -52,30 +52,32 @@ TileDBGroup <- R6::R6Class(
                    "factory method as e.g. 'SOMACollectionOpen()'."), call. = FALSE)
       }
       private$.mode = mode
-      private$.group_open_timestamp <- if (mode == "READ" && is.null(private$tiledb_timestamp)) {
+      private$.group_open_timestamp <- if (mode == "READ" && is.null(self$tiledb_timestamp)) {
         # In READ mode, if the opener supplied no timestamp then we default to the time of
         # opening, providing a temporal snapshot of all group members.
         Sys.time()
       } else {
-        private$tiledb_timestamp
+        self$tiledb_timestamp
       }
       if (is.null(private$.group_open_timestamp)) {
-        spdl::debug("Opening {} '{}' in {} mode", self$class(), self$uri, mode)
-        private$.tiledb_group <- tiledb::tiledb_group(
-          self$uri,
+        spdl::debug("[TileDBGroup$open] Opening {} '{}' in {} mode", self$class(), self$uri, mode)
+        private$.tiledb_group <- c_group_open(
+          uri = self$uri,
           type = mode,
-          ctx = private$.tiledb_ctx
+          ctxxp = private$.soma_context
         )
       } else {
-        stopifnot("tiledb_timestamp not yet supported for WRITE mode" = mode == "READ")
-        spdl::debug("Opening {} '{}' in {} mode at {}",
-                    self$class(), self$uri, mode, private$.group_open_timestamp)
+        if (internal_use_only != "allowed_use") stopifnot("tiledb_timestamp not yet supported for WRITE mode" = mode == "READ")
+        spdl::debug("[TileDBGroup$open] Opening {} '{}' in {} mode at {} ptr null {}",
+                    self$class(), self$uri, mode, private$.group_open_timestamp,
+                    is.null(private$.soma_context))
         ## The Group API does not expose a timestamp setter so we have to go via the config
-        cfg <- tiledb::config(private$.tiledb_ctx)
-        cfg["sm.group.timestamp_end"] <- format(round(as.numeric(private$.group_open_timestamp) * 1000),
-                                                scientific = FALSE, big.mark = "")
-        private$.tiledb_group <- tiledb::tiledb_group(self$uri, type = mode,
-                                                      ctx = private$.tiledb_ctx, cfg = cfg)
+        private$.tiledb_group <- c_group_open(
+          uri = self$uri,
+          type = mode,
+          ctxxp = private$.soma_context,
+          timestamp = self$.tiledb_timestamp_range
+        )
       }
       private$update_member_cache()
       private$update_metadata_cache()
@@ -98,7 +100,7 @@ TileDBGroup <- R6::R6Class(
         }
 
         spdl::debug("Closing {} '{}'", self$class(), self$uri)
-        tiledb::tiledb_group_close(private$.tiledb_group)
+        c_group_close(private$.tiledb_group)
         private$.mode <- NULL
         private$.tiledb_group <- NULL
         private$.group_open_timestamp <- NULL
@@ -106,7 +108,7 @@ TileDBGroup <- R6::R6Class(
       invisible(self)
     },
 
-    #' @description Add new member to the group. (lifecycle: experimental)
+    #' @description Add new member to the group. (lifecycle: maturing)
     #' @param object A `TileDBArray` or `TileDBGroup` object to add.
     #' @param name Name to use for the member. By default the base name of
     #' the object's URI is used.
@@ -133,22 +135,22 @@ TileDBGroup <- R6::R6Class(
       } else {
         uri <- object$uri
       }
+      spdl::debug("[TileDBGroup$set] '{}' uri {} relative {}", name, uri, relative)
+
       name <- name %||% basename(uri)
 
       private$check_open_for_write()
 
-      tiledb::tiledb_group_add_member(
-        grp = private$.tiledb_group,
-        uri = uri,
-        relative = relative,
-        name = name
-      )
+      c_group_set(private$.tiledb_group, uri,
+                  0, # -> use 'automatic' as opposed to 'relative' or 'absolute'
+                  name,
+                  if (inherits(object, "TileDBGroup")) "SOMAGroup" else "SOMAArray")
 
       private$add_cached_member(name, object)
    },
 
     #' @description Retrieve a group member by name. If the member isn't already
-    #' open, it is opened in the same mode as the parent. (lifecycle: experimental)
+    #' open, it is opened in the same mode as the parent. (lifecycle: maturing)
     #' @param name The name of the member.
     #' @param mode Mode to open in
     #' @returns A `TileDBArray` or `TileDBGroup`.
@@ -171,31 +173,33 @@ TileDBGroup <- R6::R6Class(
       # we return it. But if not (e.g. first access on read from storage)
       # then we invoke the appropriate constructor. Note: child classes
       # may override construct_member.
-      if (is.null(member$object)) {
+      obj <- if (is.null(member$object)) {
+        spdl::debug("[TileDBGroup$get] construct member {} type {}", member$uri, member$type)
         obj <- private$construct_member(member$uri, member$type)
-        obj$open(mode = self$mode(), internal_use_only = "allowed_use")
       } else {
-        obj <- member$object
-        if (!obj$is_open()) {
-          obj$open(mode = self$mode(), internal_use_only = "allowed_use")
-        }
+        member$object
+      }
+      spdl::debug("[TileDBGroup$get] open check, mode {}", self$mode())
+      if (!obj$is_open()) {
+        switch(
+          EXPR = (mode <- self$mode()),
+          READ = obj$open(mode, internal_use_only = "allowed_use"),
+          WRITE = obj$reopen(mode)
+        )
       }
 
       private$add_cached_member(name, obj)
       obj
     },
 
-    #' @description Remove member. (lifecycle: experimental)
+    #' @description Remove member. (lifecycle: maturing)
     #' @param name Name of the member to remove.
     #' @export
     remove = function(name) {
       stopifnot(is_scalar_character(name))
       private$check_open_for_write()
 
-      tiledb::tiledb_group_remove_member(
-        grp = private$.tiledb_group,
-        uri = name
-      )
+      c_group_remove_member(private$.tiledb_group, name)
 
       # Drop member if cache has been initialized
       if (is.list(private$.member_cache)) {
@@ -203,7 +207,7 @@ TileDBGroup <- R6::R6Class(
       }
     },
 
-    #' @description Length in the number of members. (lifecycle: experimental)
+    #' @description Length in the number of members. (lifecycle: maturing)
     #' @return Scalar `integer`
     length = function() {
       private$check_open_for_read_or_write()
@@ -211,7 +215,7 @@ TileDBGroup <- R6::R6Class(
       length(private$.member_cache)
     },
 
-    #' @description Retrieve the names of members. (lifecycle: experimental)
+    #' @description Retrieve the names of members. (lifecycle: maturing)
     #' @return A `character` vector of member names.
     names = function() {
       private$check_open_for_read_or_write()
@@ -219,14 +223,14 @@ TileDBGroup <- R6::R6Class(
       names(private$.member_cache) %||% character(length = 0L)
     },
 
-    #' @description Retrieve a `list` of members. (lifecycle: experimental)
+    #' @description Retrieve a `list` of members. (lifecycle: maturing)
     to_list = function() {
       private$check_open_for_read_or_write()
       private$fill_member_cache_if_null()
       private$.member_cache
     },
 
-    #' @description Retrieve a `data.frame` of members. (lifecycle: experimental)
+    #' @description Retrieve a `data.frame` of members. (lifecycle: maturing)
     to_data_frame = function() {
       private$check_open_for_read_or_write()
       count <- self$length()
@@ -244,7 +248,7 @@ TileDBGroup <- R6::R6Class(
       df
     },
 
-    #' @description Retrieve metadata. (lifecycle: experimental)
+    #' @description Retrieve metadata. (lifecycle: maturing)
     #' @param key The name of the metadata attribute to retrieve.
     #'   is not NULL.
     #' @return A list of metadata values.
@@ -255,13 +259,15 @@ TileDBGroup <- R6::R6Class(
 
       spdl::debug("Retrieving metadata for {} '{}'", self$class(), self$uri)
       if (!is.null(key)) {
-        private$.metadata_cache[[key]]
+        val <- private$.metadata_cache[[key]]
+        if (is.list(val)) val <- unlist(val)
+        val
       } else {
         private$.metadata_cache
       }
     },
 
-    #' @description Add list of metadata. (lifecycle: experimental)
+    #' @description Add list of metadata. (lifecycle: maturing)
     #' @param metadata Named list of metadata to add.
     #' @return NULL
     set_metadata = function(metadata) {
@@ -273,10 +279,10 @@ TileDBGroup <- R6::R6Class(
 
       spdl::debug("Writing metadata to {} '{}'", self$class(), self$uri)
       dev_null <- mapply(
-        FUN = tiledb::tiledb_group_put_metadata,
+        FUN = c_group_put_metadata,
         key = names(metadata),
-        val = metadata,
-        MoreArgs = list(grp = private$.tiledb_group),
+        obj = metadata,
+        MoreArgs = list(xp = private$.tiledb_group),
         SIMPLIFY = FALSE
       )
 
@@ -309,7 +315,7 @@ TileDBGroup <- R6::R6Class(
     .tiledb_group = NULL,
 
     # This field stores the timestamp with which we opened the group, whether we used the
-    # opener-supplied private$tiledb_timestamp, or defaulted to the time of opening, or neither
+    # opener-supplied self$tiledb_timestamp, or defaulted to the time of opening, or neither
     # (NULL). This is the timestamp to propagate to accessed members.
     .group_open_timestamp = NULL,
 
@@ -329,9 +335,12 @@ TileDBGroup <- R6::R6Class(
         is_scalar_character(uri),
         is_scalar_character(type)
       )
+      spdl::warn("[TileDBGroup$construct_member] uri {} type {}", uri, type)
       constructor <- switch(type,
-        ARRAY = TileDBArray$new,
-        GROUP = TileDBGroup$new,
+        ARRAY     = TileDBArray$new,
+        SOMAArray = TileDBArray$new,
+        GROUP     = TileDBGroup$new,
+        SOMAGroup = TileDBGroup$new,
         stop(sprintf("Unknown member type: %s", type), call. = FALSE)
       )
       obj <- constructor(uri, tiledbsoma_ctx = self$tiledbsoma_ctx, tiledb_timestamp = private$.group_open_timestamp,
@@ -357,26 +366,21 @@ TileDBGroup <- R6::R6Class(
     # ----------------------------------------------------------------
     # Member caching
 
-    # @description Retrieve all group members. (lifecycle: experimental)
+    # @description Retrieve all group members. (lifecycle: maturing)
     # @return A list indexed by group member names where each element is a
     # list with names: name, uri, and type.
     get_all_members_uncached_read = function(group_handle) {
 
-      count <- tiledb::tiledb_group_member_count(group_handle)
+      count <- c_group_member_count(group_handle)
       if (count == 0) return(list())
 
       members <- vector(mode = "list", length = count)
       if (count == 0) return(members)
 
-      for (i in seq_len(count)) {
-        members[[i]] <- setNames(
-          object = as.list(tiledb::tiledb_group_member(group_handle, i - 1L)),
-          nm = c("type", "uri", "name")
-        )
-      }
 
       # Key the list by group member name
-      names(members) <- vapply_char(members, FUN = getElement, name = "name")
+      ## names list of lists
+      members <- c_group_members(group_handle)
       members
     },
 
@@ -387,7 +391,7 @@ TileDBGroup <- R6::R6Class(
     },
 
     update_member_cache = function() {
-      spdl::debug("Updating member cache for {} '{}'", self$class(), self$uri)
+      spdl::debug("[TileDBGroup$updating_member_cache] class {} uri '{}'", self$class(), self$uri)
 
       # See notes above -- at the TileDB implementation level, we cannot read anything about the
       # group while the group is open for read, but at the SOMA application level we must support
@@ -398,8 +402,13 @@ TileDBGroup <- R6::R6Class(
         # FIXME: when we add write timestamps we should open this temp handle with tiledb_timestamp
         # too. The stopifnot is currently "unreachable" since open() stops if called with WRITE
         # mode and non-null tiledb_timestamp.
-        stopifnot("FIXME" = is.null(private$.group_open_timestamp))
-        group_handle <- tiledb::tiledb_group(self$uri, type = "READ", ctx = private$.tiledb_ctx)
+        if (is.null(private$.soma_context)) private$.soma_context <- soma_context()
+        spdl::debug("[TileDBGroup$updating_member_cache] re-opening {} uri '{}' ctx null {} time null {}",
+                    self$class(), self$uri, is.null(private$.soma_context),
+                    is.null(private$.tiledb_timestamp_range))
+        group_handle <- c_group_open(self$uri, type = "READ",
+                                     ctx = private$.soma_context,
+                                     private$.tiledb_timestamp_range)
       }
 
       members <- private$get_all_members_uncached_read(group_handle)
@@ -412,7 +421,7 @@ TileDBGroup <- R6::R6Class(
       }
 
       if (private$.mode == "WRITE") {
-        tiledb::tiledb_group_close(group_handle)
+        c_group_close(group_handle)
       }
     },
 
@@ -481,13 +490,14 @@ TileDBGroup <- R6::R6Class(
       # we must open a temporary handle for read, to fill the cache.
       group_handle <- private$.tiledb_group
       if (private$.mode == "WRITE") {
-        group_handle <- tiledb::tiledb_group(self$uri, type = "READ", ctx = private$.tiledb_ctx)
+        group_handle <- c_group_open(self$uri, type ="READ", ctx = private$.soma_context,
+                                     private$.tiledb_timestamp_range)
+
       }
 
-      private$.metadata_cache <- tiledb::tiledb_group_get_all_metadata(group_handle)
-
+      private$.metadata_cache <- c_group_get_metadata(group_handle)
       if (private$.mode == "WRITE") {
-        tiledb::tiledb_group_close(group_handle)
+          c_group_get_metadata(group_handle)
       }
 
       invisible(NULL)

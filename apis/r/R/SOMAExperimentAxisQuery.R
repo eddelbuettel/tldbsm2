@@ -10,7 +10,7 @@ NULL
 #' single [`SOMAMeasurement`] in a [`SOMAExperiment`], by `obs`/`var` (axis)
 #' coordinates and/or value filter. The primary use for this class is slicing
 #' [`SOMAExperiment`] `X` layers by `obs` or `var` value and/or coordinates.
-#' (lifecycle: experimental)
+#' (lifecycle: maturing)
 #'
 #' ## X Layer Support
 #'
@@ -93,7 +93,7 @@ SOMAExperimentAxisQuery <- R6::R6Class(
       arrow::concat_arrays(private$.joinids$var())
     },
 
-    #' @description Retrieves an `X` layer as a link{SOMASparseNDArrayRead}
+    #' @description Retrieves an `X` layer as a \link{SOMASparseNDArrayRead}
     #' @param layer_name The name of the layer to retrieve.
     X = function(layer_name) {
       stopifnot(
@@ -411,12 +411,42 @@ SOMAExperimentAxisQuery <- R6::R6Class(
 
       # Retrieve coo arrow table with query result
       layer <- self$ms[[collection]]$get(layer_name)
+
       if (inherits(layer, "SOMADenseNDArray")) {
         tbl <- layer$read_arrow_table(coords = coords)
-      } else {
-        tbl <- layer$read(coords = coords)$tables()$concat()
+        # For dense arrays, coordinates are not materialized in storage.
+        # Here we re-supply them.
+        ldims <- layer$dimnames()
+        for (i in seq_along(ldims)) {
+          ldim <- ldims[i]
+          if (is.null(coords[[ldim]])) {
+            coords[[ldim]] <- seq_len(as.numeric(layer$non_empty_domain()[i] + 1L))
+          }
+        }
+        mat <- matrix(
+          tbl$soma_data$as_vector(),
+          nrow = length(coords$soma_dim_0),
+          ncol = length(coords$soma_dim_1),
+          byrow = TRUE
+        )
+        # Add dimnames
+        dim_names <- switch(
+          EXPR = collection,
+          X = list(obs_labels, var_labels),
+          obsm = list(obs_labels, coords$soma_dim_1), # or list(obs_labels, seq_len(ncol(mat)))
+          varm = list(var_labels, coords$soma_dim_1), # or list(var_lavels, seq_len(ncol(mat)))
+          obsp = list(obs_labels, obs_labels),
+          varp = list(var_labels, var_labels)
+        )
+        dim_names <- Map("%||%", dim_names, coords)
+        dimnames(mat) <- dim_names
+        return(mat)
       }
 
+      # For sparse arrays, coordinates are materialized in storage.
+      # They come back with the `tbl` as COO a.k.a. IJV triples.
+
+      tbl <- layer$read(coords = coords)$tables()$concat()
 
       # Reindex the coordinates
       # Constructing a matrix with the joinids produces a matrix with
@@ -485,6 +515,7 @@ SOMAExperimentAxisQuery <- R6::R6Class(
     #' @param obsm_layers \Sexpr[results=rd]{tiledbsoma:::rd_outgest_mlayers()}
     #' @param varm_layers \Sexpr[results=rd]{tiledbsoma:::rd_outgest_mlayers(axis = 'varm')}
     #' @param obsp_layers \Sexpr[results=rd]{tiledbsoma:::rd_outgest_players()}
+    #' @param drop_levels Drop unused levels from \code{obs} and \code{var} factor columns
     #'
     #' @return A \code{\link[SeuratObject]{Seurat}} object
     #'
@@ -496,7 +527,8 @@ SOMAExperimentAxisQuery <- R6::R6Class(
       var_column_names = NULL,
       obsm_layers = NULL,
       varm_layers = NULL,
-      obsp_layers = NULL
+      obsp_layers = NULL,
+      drop_levels = FALSE
     ) {
       check_package('SeuratObject', version = .MINIMUM_SEURAT_VERSION())
       op <- options(Seurat.object.assay.version = 'v3')
@@ -515,7 +547,9 @@ SOMAExperimentAxisQuery <- R6::R6Class(
           is_scalar_logical(varm_layers),
         "'obsp_layers' must be a character vector" = is.null(obsp_layers) ||
           is.character(obsp_layers) ||
-          is_scalar_logical(obsp_layers)
+          is_scalar_logical(obsp_layers),
+        "'drop_levels' must be TRUE or FALSE" = isTRUE(drop_levels) ||
+          isFALSE(drop_levels)
       )
       tryCatch(
         expr = self$obs_df,
@@ -540,6 +574,8 @@ SOMAExperimentAxisQuery <- R6::R6Class(
         var_index = var_index,
         var_column_names = var_column_names
       )
+      op <- options(Seurat.object.assay.calcn = FALSE)
+      on.exit(options(op), add = TRUE, after = FALSE)
       object <- SeuratObject::CreateSeuratObject(
         counts = assay,
         assay = private$.measurement_name
@@ -553,8 +589,10 @@ SOMAExperimentAxisQuery <- R6::R6Class(
         y = obs_index
       )
       if (!(isFALSE(obs_column_names) || rlang::is_na(obs_column_names))) {
-        obs <- as.data.frame(
-          x = self$obs(obs_column_names)$concat()$to_data_frame()
+        obs <- private$.load_df(
+          'obs',
+          column_names = obs_column_names,
+          drop_levels = drop_levels
         )
         row.names(obs) <- cells
         object[[names(obs)]] <- obs
@@ -677,10 +715,13 @@ SOMAExperimentAxisQuery <- R6::R6Class(
       # Load in the command logs
       uns <- try(self$experiment$get("uns"), silent = TRUE)
       if (inherits(uns, 'SOMACollection')) {
-        cmds <- tryCatch(
-          .load_seurat_command(uns, ms_names = private$.measurement_name),
-          packageCheckError = .err_to_warn,
-          missingCollectionError = .err_to_warn
+        cmds <- withCallingHandlers(
+          expr = tryCatch(
+            .load_seurat_command(uns, ms_names = private$.measurement_name),
+            packageCheckError = .err_to_warn,
+            missingCollectionError = .err_to_warn
+          ),
+          missingCollectionError = .maybe_muffle
         )
         for (i in names(cmds)) {
           object[[i]] <- cmds[[i]]
@@ -697,6 +738,7 @@ SOMAExperimentAxisQuery <- R6::R6Class(
     #' @param obs_index \Sexpr[results=rd]{tiledbsoma:::rd_outgest_index()}
     #' @param var_index \Sexpr[results=rd]{tiledbsoma:::rd_outgest_index(axis = 'var')}
     #' @param var_column_names \Sexpr[results=rd]{tiledbsoma:::rd_outgest_metadata_names(axis = 'var')}
+    #' @param drop_levels Drop unused levels from \code{var} factor columns
     #'
     #' @return An \code{\link[SeuratObject]{Assay}} object
     #'
@@ -704,7 +746,8 @@ SOMAExperimentAxisQuery <- R6::R6Class(
       X_layers = c(counts = 'counts', data = 'logcounts'),
       obs_index = NULL,
       var_index = NULL,
-      var_column_names = NULL
+      var_column_names = NULL,
+      drop_levels = FALSE
     ) {
       version <- 'v3'
       check_package('SeuratObject', version = .MINIMUM_SEURAT_VERSION())
@@ -720,7 +763,9 @@ SOMAExperimentAxisQuery <- R6::R6Class(
           (is_scalar_character(var_index) && !is.na(var_index)),
         "'var_column_names' must be a character vector" = is.null(var_column_names) ||
           is.character(var_column_names) ||
-          is_scalar_logical(var_column_names)
+          is_scalar_logical(var_column_names),
+        "'drop_levels' must be TRUE or FALSE" = isTRUE(drop_levels) ||
+          isFALSE(drop_levels)
       )
       match.arg(version, choices = 'v3')
       features <- if (is.null(var_index)) {
@@ -775,7 +820,11 @@ SOMAExperimentAxisQuery <- R6::R6Class(
         y = var_index
       )
       if (!(isFALSE(var_column_names) || rlang::is_na(var_column_names))) {
-        var <- as.data.frame(self$var(var_column_names)$concat()$to_data_frame())
+        var <- private$.load_df(
+          'var',
+          column_names = var_column_names,
+          drop_levels = drop_levels
+        )
         row.names(var) <- features
         obj[[names(var)]] <- var
       }
@@ -1020,6 +1069,7 @@ SOMAExperimentAxisQuery <- R6::R6Class(
     #' @param var_column_names \Sexpr[results=rd]{tiledbsoma:::rd_outgest_metadata_names('sce', 'var')}
     #' @param obsp_layers \Sexpr[results=rd]{tiledbsoma:::rd_outgest_players('sce')}
     #' @param varp_layers \Sexpr[results=rd]{tiledbsoma:::rd_outgest_players('sce', 'varp')}
+    #' @param drop_levels Drop unused levels from \code{obs} and \code{var} factor columns
     #'
     #' @return A \code{\link[SingleCellExperiment]{SingleCellExperiment}} object
     #'
@@ -1033,7 +1083,8 @@ SOMAExperimentAxisQuery <- R6::R6Class(
       # Omission of `varm_layers` parameter is purposeful as
       # SCE objects do not support `varm_layers`
       obsp_layers = NULL,
-      varp_layers = NULL
+      varp_layers = NULL,
+      drop_levels = FALSE
     ) {
       check_package('SingleCellExperiment', version = .MINIMUM_SCE_VERSION())
       stopifnot(
@@ -1056,12 +1107,24 @@ SOMAExperimentAxisQuery <- R6::R6Class(
           is_scalar_logical(obsp_layers),
         "'varp_layers' must be a character vector" = is.null(varp_layers) ||
           is.character(varp_layers) ||
-          is_scalar_logical(varp_layers)
+          is_scalar_logical(varp_layers),
+        "'drop_levels' must be TRUE or FALSE" = isTRUE(drop_levels) ||
+          isFALSE(drop_levels)
       )
       # Load in colData
-      obs <- private$.load_df('obs', index = obs_index, column_names = obs_column_names)
+      obs <- private$.load_df(
+        'obs',
+        index = obs_index,
+        column_names = obs_column_names,
+        drop_levels = drop_levels
+      )
       # Load in rowData
-      var <- private$.load_df('var', index = var_index, column_names = var_column_names)
+      var <- private$.load_df(
+        'var',
+        index = var_index,
+        column_names = var_column_names,
+        drop_levels = drop_levels
+      )
       # Check the layers
       X_layers <- pad_names(X_layers %||% self$ms$X$names())
       assert_subset(x = X_layers, y = self$ms$X$names(), type = 'X_layer')
@@ -1219,11 +1282,17 @@ SOMAExperimentAxisQuery <- R6::R6Class(
     # - `FALSE` or `NA`: return a data frame the number of rows as present
     # in `df_name` and zero columns
     # - a character vector of names of attributes to load in
-    .load_df = function(df_name = c('obs', 'var'), index = NULL, column_names = NULL) {
+    .load_df = function(
+      df_name = c('obs', 'var'),
+      index = NULL,
+      column_names = NULL,
+      drop_levels = FALSE
+    ) {
       stopifnot(
         is.character(df_name),
         is.null(index) || is_scalar_character(index),
-        is.null(column_names) || is.character(column_names) || is_scalar_logical(column_names)
+        is.null(column_names) || is.character(column_names) || is_scalar_logical(column_names),
+        isTRUE(drop_levels) || isFALSE(drop_levels)
       )
       df_name <- match.arg(arg = df_name)
       switch(
@@ -1270,6 +1339,9 @@ SOMAExperimentAxisQuery <- R6::R6Class(
         df[, character(), drop = FALSE]
       } else {
         df[, column_names, drop = FALSE]
+      }
+      if (isTRUE(drop_levels)) {
+        df <- droplevels(df)
       }
       return(df)
     },

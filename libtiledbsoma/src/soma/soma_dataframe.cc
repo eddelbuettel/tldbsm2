@@ -44,14 +44,15 @@ void SOMADataFrame::create(
     std::unique_ptr<ArrowSchema> schema,
     ArrowTable index_columns,
     std::shared_ptr<SOMAContext> ctx,
-    std::optional<PlatformConfig> platform_config,
+    PlatformConfig platform_config,
     std::optional<TimestampRange> timestamp) {
     auto tiledb_schema = ArrowAdapter::tiledb_schema_from_arrow_schema(
         ctx->tiledb_ctx(),
         std::move(schema),
         ArrowTable(
             std::move(index_columns.first), std::move(index_columns.second)),
-        TILEDB_SPARSE,
+        "SOMADataFrame",
+        true,
         platform_config);
     SOMAArray::create(ctx, uri, tiledb_schema, "SOMADataFrame", timestamp);
 }
@@ -67,10 +68,18 @@ std::unique_ptr<SOMADataFrame> SOMADataFrame::open(
         mode, uri, ctx, column_names, result_order, timestamp);
 }
 
-bool SOMADataFrame::exists(std::string_view uri) {
+std::unique_ptr<SOMADataFrame> SOMADataFrame::open(
+    std::string_view uri,
+    OpenMode mode,
+    std::string_view name,
+    std::map<std::string, std::string> platform_config) {
+    return std::make_unique<SOMADataFrame>(mode, uri, name, platform_config);
+}
+
+bool SOMADataFrame::exists(
+    std::string_view uri, std::shared_ptr<SOMAContext> ctx) {
     try {
-        auto obj = SOMAObject::open(
-            uri, OpenMode::read, std::make_shared<SOMAContext>());
+        auto obj = SOMAObject::open(uri, OpenMode::read, ctx);
         return "SOMADataFrame" == obj->type();
     } catch (TileDBSOMAError& e) {
         return false;
@@ -91,6 +100,14 @@ const std::vector<std::string> SOMADataFrame::index_column_names() const {
 
 uint64_t SOMADataFrame::count() {
     return this->nnz();
+}
+
+std::optional<int64_t> SOMADataFrame::maybe_soma_joinid_shape() {
+    return _maybe_soma_joinid_shape();
+}
+
+std::optional<int64_t> SOMADataFrame::maybe_soma_joinid_maxshape() {
+    return _maybe_soma_joinid_maxshape();
 }
 
 }  // namespace tiledbsoma

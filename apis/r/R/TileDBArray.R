@@ -1,7 +1,7 @@
 #' TileDB Array Base Class
 #'
 #' @description Base class for representing an individual TileDB array.
-#' (lifecycle: experimental)
+#' (lifecycle: maturing)
 #'
 #' @keywords internal
 #' @export
@@ -26,16 +26,25 @@ TileDBArray <- R6::R6Class(
       }
 
       private$.mode <- mode
-      if (is.null(private$tiledb_timestamp)) {
-        spdl::debug("[TileDBArray::open] Opening {} '{}' in {} mode", self$class(), self$uri, mode)
+      if (is.null(self$tiledb_timestamp)) {
+        spdl::debug("[TileDBArray$open] Opening {} '{}' in {} mode", self$class(), self$uri, mode)
         private$.tiledb_array <- tiledb::tiledb_array_open(self$object, type = mode)
       } else {
-        stopifnot("tiledb_timestamp not yet supported for WRITE mode" = mode == "READ")
-        spdl::debug("[TileDBArray::open] Opening {} '{}' in {} mode at {}",
-                    self$class(), self$uri, mode, private$tiledb_timestamp)
-        private$.tiledb_array <- tiledb::tiledb_array_open_at(self$object, type = mode,
-                                                              timestamp = private$tiledb_timestamp)
+        if (is.null(internal_use_only)) stopifnot("tiledb_timestamp not yet supported for WRITE mode" = mode == "READ")
+        spdl::debug(
+          "[TileDBArray$open] Opening {} '{}' in {} mode at ({})",
+          self$class(),
+          self$uri,
+          mode,
+          self$tiledb_timestamp %||% "now"
+        )
+        #private$.tiledb_array <- tiledb::tiledb_array_open_at(self$object, type = mode,
+        #                                                      timestamp = self$tiledb_timestamp)
       }
+
+      ## TODO -- cannot do here while needed for array case does not work for data frame case
+      #private$.type <- arrow_type_from_tiledb_type(tdbtype)
+
       private$update_metadata_cache()
       self
     },
@@ -43,13 +52,13 @@ TileDBArray <- R6::R6Class(
     #' @description Close the SOMA object.
     #' @return The object, invisibly
     close = function() {
-      spdl::debug("[TileDBArray::close] Closing {} '{}'", self$class(), self$uri)
+      spdl::debug("[TileDBArray$close] Closing {} '{}'", self$class(), self$uri)
       private$.mode = "CLOSED"
       tiledb::tiledb_array_close(self$object)
       invisible(self)
     },
 
-    #' @description Print summary of the array. (lifecycle: experimental)
+    #' @description Print summary of the array. (lifecycle: maturing)
     print = function() {
       super$print()
       if (self$exists()) {
@@ -58,7 +67,7 @@ TileDBArray <- R6::R6Class(
       }
     },
 
-    #' @description Return a [`TileDBArray`] object (lifecycle: experimental)
+    #' @description Return a [`TileDBArray`] object (lifecycle: maturing)
     #' @param ... Optional arguments to pass to `tiledb::tiledb_array()`
     #' @return A [`tiledb::tiledb_array`] object.
     tiledb_array = function(...) {
@@ -67,26 +76,28 @@ TileDBArray <- R6::R6Class(
       args$query_type <- self$.mode
       args$query_layout <- "UNORDERED"
       args$ctx <- self$tiledbsoma_ctx$context()
-      spdl::debug("[TileDBArray::tiledb_array] ctor uri {} mode {} layout {}", args$uri, args$query_type, args$query_layout)
+      spdl::debug("[TileDBArray$tiledb_array] ctor uri {} mode {} layout {}", args$uri, args$query_type, args$query_layout)
       do.call(tiledb::tiledb_array, args)
     },
 
-    #' @description Retrieve metadata from the TileDB array. (lifecycle: experimental)
+    #' @description Retrieve metadata from the TileDB array. (lifecycle: maturing)
     #' @param key The name of the metadata attribute to retrieve.
     #' @return A list of metadata values.
     get_metadata = function(key = NULL) {
       private$check_open_for_read_or_write()
 
-      spdl::debug("[TileDBArray::get_metadata] Retrieving metadata for {} '{}'", self$class(), self$uri)
+      spdl::debug("[TileDBArray$get_metadata] Retrieving metadata for {} '{}'", self$class(), self$uri)
       private$fill_metadata_cache_if_null()
       if (!is.null(key)) {
-        private$.metadata_cache[[key]]
+        val <- private$.metadata_cache[[key]]
+        if (is.list(val)) val <- unlist(val)
+        val
       } else {
         private$.metadata_cache
       }
     },
 
-    #' @description Add list of metadata to the specified TileDB array. (lifecycle: experimental)
+    #' @description Add list of metadata to the specified TileDB array. (lifecycle: maturing)
     #' @param metadata Named list of metadata to add.
     #' @return NULL
     set_metadata = function(metadata) {
@@ -94,15 +105,21 @@ TileDBArray <- R6::R6Class(
         "Metadata must be a named list" = is_named_list(metadata)
       )
 
-      private$check_open_for_write()
+      #private$check_open_for_write()
 
-      dev_null <- mapply(
-        FUN = tiledb::tiledb_put_metadata,
-        key = names(metadata),
-        val = metadata,
-        MoreArgs = list(arr = self$object),
-        SIMPLIFY = FALSE
-      )
+      for (nm in names(metadata)) {
+          val <- metadata[[nm]]
+          spdl::debug("[TileDBArray$set_metadata] setting key {} to {} ({})", nm, val, class(val))
+          set_metadata(
+            uri = self$uri,
+            key = nm,
+            valuesxp = val,
+            type = class(val),
+            is_array = TRUE,
+            ctxxp = soma_context(),
+            tsvec = self$.tiledb_timestamp_range
+          )
+      }
 
       dev_null <- mapply(
         FUN = private$add_cached_metadata,
@@ -112,19 +129,19 @@ TileDBArray <- R6::R6Class(
       )
     },
 
-    #' @description Retrieve the array schema as an Arrow schema (lifecycle: experimental)
+    #' @description Retrieve the array schema as an Arrow schema (lifecycle: maturing)
     #' @return A [`arrow::schema`] object
     schema = function() {
       arrow_schema_from_tiledb_schema(tiledb::schema(self$object))
     },
 
-    #' @description Retrieve the array schema as TileDB schema (lifecycle: experimental)
+    #' @description Retrieve the array schema as TileDB schema (lifecycle: maturing)
     #' @return A [`tiledb::tiledb_array_schema`] object
     tiledb_schema = function() {
       tiledb::schema(self$object)
     },
 
-    #' @description Retrieve the array dimensions (lifecycle: experimental)
+    #' @description Retrieve the array dimensions (lifecycle: maturing)
     #' @return A named list of [`tiledb::tiledb_dim`] objects
     dimensions = function() {
       dims <- tiledb::dimensions(self$tiledb_schema())
@@ -134,7 +151,7 @@ TileDBArray <- R6::R6Class(
     #' @description Retrieve the shape, i.e. the capacity of each dimension.
     #' This will not necessarily match the bounds of occupied cells within the
     #' array.  Rather, it is the bounds outside of which no data may be written.
-    #' (lifecycle: experimental)
+    #' (lifecycle: maturing)
     #' @return A named vector of dimension length (and the same type as the dimension)
     shape = function() {
       as.integer64(shape(
@@ -143,8 +160,20 @@ TileDBArray <- R6::R6Class(
       ))
     },
 
+    #' @description Retrieve the maxshape, i.e. maximum possible that the
+    # shape can be resized up to.
+    #' (lifecycle: maturing)
+    #' @return A named vector of dimension length (and the same type as the dimension)
+    maxshape = function() {
+      as.integer64(maxshape(
+        self$uri,
+        config=as.character(tiledb::config(self$tiledbsoma_ctx$context()))
+      ))
+    },
+
     #' @description Retrieve the range of indexes for a dimension that were
-    #'  explicitly written.
+    #'  explicitly written.  This method is deprecated as of TileDB-SOMA 1.13, and will be
+    #' removed in TileDB-SOMA 1.14.
     #' @param simplify Return a vector of [`bit64::integer64`]s containing only
     #' the upper bounds.
     #' @param index1 Return the used shape with 1-based indices (0-based indices are returned by default)
@@ -155,6 +184,7 @@ TileDBArray <- R6::R6Class(
         isTRUE(simplify) || isFALSE(simplify),
         isTRUE(index1) || isFALSE(index1)
       )
+      .Deprecated(new="shape", msg="The 'used_shape' function will be removed in TileDB-SOMA 1.14.")
       dims <- self$dimnames()
       utilized <- vector(mode = 'list', length = length(dims))
       names(utilized) <- dims
@@ -202,9 +232,15 @@ TileDBArray <- R6::R6Class(
     non_empty_domain = function(index1 = FALSE) {
       dims <- self$dimnames()
       ned <- bit64::integer64(length = length(dims))
+      ## added during C++-ification as self$object could close
+      if (isFALSE(tiledb::tiledb_array_is_open(self$object))) {
+          arrhandle <- tiledb::tiledb_array_open(self$object, type = "READ")
+      } else {
+          arrhandle <- self$object
+      }
       for (i in seq_along(along.with = ned)) {
         dom <- max(tiledb::tiledb_array_get_non_empty_domain_from_name(
-          self$object,
+          arrhandle, # instead of:  self$object,
           name = dims[i]
         ))
         if (isTRUE(x = index1)) {
@@ -215,20 +251,20 @@ TileDBArray <- R6::R6Class(
       return(ned)
     },
 
-    #' @description Retrieve number of dimensions (lifecycle: experimental)
+    #' @description Retrieve number of dimensions (lifecycle: maturing)
     #' @return A scalar with the number of dimensions
     ndim = function() {
       dims <- tiledb::dimensions(self$tiledb_schema())
       length(dims)
     },
 
-    #' @description Retrieve the array attributes (lifecycle: experimental)
+    #' @description Retrieve the array attributes (lifecycle: maturing)
     #' @return A list of [`tiledb::tiledb_attr`] objects
     attributes = function() {
       tiledb::attrs(self$tiledb_schema())
     },
 
-    #' @description Retrieve dimension names (lifecycle: experimental)
+    #' @description Retrieve dimension names (lifecycle: maturing)
     #' @return A character vector with the array's dimension names
     dimnames = function() {
       vapply(
@@ -239,7 +275,7 @@ TileDBArray <- R6::R6Class(
       )
     },
 
-    #' @description Retrieve attribute names (lifecycle: experimental)
+    #' @description Retrieve attribute names (lifecycle: maturing)
     #' @return A character vector with the array's attribute names
     attrnames = function() {
       vapply(
@@ -251,19 +287,19 @@ TileDBArray <- R6::R6Class(
     },
 
     #' @description Retrieve the names of all columns, including dimensions and
-    #' attributes (lifecycle: experimental)
+    #' attributes (lifecycle: maturing)
     #' @return A character vector with the array's column names
     colnames = function() {
       c(self$dimnames(), self$attrnames())
     },
 
-    #' @description Retrieve names of index (dimension) columns (lifecycle: experimental)
+    #' @description Retrieve names of index (dimension) columns (lifecycle: maturing)
     #' @return A character vector with the array index (dimension) names
     index_column_names = function() {
       self$dimnames()
     },
 
-    #' @description Get number of fragments in the array (lifecycle: experimental)
+    #' @description Get number of fragments in the array (lifecycle: maturing)
     fragment_count = function() {
       tiledb::tiledb_fragment_info_get_num(
         tiledb::tiledb_fragment_info(self$uri)
@@ -333,29 +369,29 @@ TileDBArray <- R6::R6Class(
     },
 
     update_metadata_cache = function() {
-      spdl::debug("[TileDBArray::update_metadata_cache] updating metadata cache for {} '{}' in {}", self$class(), self$uri, private$.mode)
+      spdl::debug("[TileDBArray$update_metadata_cache] updating metadata cache for {} '{}' in {}", self$class(), self$uri, private$.mode)
 
       # See notes above -- at the TileDB implementation level, we cannot read array metadata
       # while the array is open for read, but at the SOMA application level we must support
       # this. Therefore if the array is opened for write and there is no cache populated then
       # we must open a temporary handle for read, to fill the cache.
-      array_handle <- private$.tiledb_array
-      if (private$.mode == "WRITE") {
-        spdl::debug("[TileDBArray::update_metadata_cache] getting object")
-        array_object <- tiledb::tiledb_array(self$uri, ctx = private$.tiledb_ctx)
-        array_handle <- tiledb::tiledb_array_open(array_object, type = "READ")
-      }
+      #array_handle <- private$.tiledb_array
+      #if (private$.mode == "WRITE") {
+      #  spdl::debug("[TileDBArray::update_metadata_cache] getting object")
+      #  array_object <- tiledb::tiledb_array(self$uri, ctx = private$.tiledb_ctx)
+      #  array_handle <- tiledb::tiledb_array_open(array_object, type = "READ")
+      #}
 
-      if (isFALSE(tiledb::tiledb_array_is_open(array_handle))) {
-        spdl::debug("[TileDBArray::update_metadata_cache] reopening object")
-        array_handle <- tiledb::tiledb_array_open(array_handle, type = "READ")
-      }
+      #if (isFALSE(tiledb::tiledb_array_is_open(array_handle))) {
+      #  spdl::debug("[TileDBArray::update_metadata_cache] reopening object")
+      #  array_handle <- tiledb::tiledb_array_open(array_handle, type = "READ")
+      #}
 
-      private$.metadata_cache <- tiledb::tiledb_get_all_metadata(array_handle)
-
-      if (private$.mode == "WRITE") {
-        tiledb::tiledb_array_close(array_handle)
-      }
+      private$.metadata_cache <- get_all_metadata(self$uri, TRUE, soma_context())
+      #print(str(private$.metadata_cache))
+      #if (private$.mode == "WRITE") {
+      #  tiledb::tiledb_array_close(array_handle)
+      #}
 
       invisible(NULL)
     },

@@ -70,8 +70,12 @@ uns_hint <- function(type = c('1d', '2d')) {
   ))
 }
 
-.err_to_warn <- function(err, immediate. = TRUE) {
-  warning(conditionMessage(err), call. = FALSE, immediate. = immediate.)
+.err_to_warn <- function(err) {
+  warning(warningCondition(
+    message = conditionMessage(err),
+    class = setdiff(class(err), c('warning', 'simpleError', 'error', 'condition')),
+    call = conditionCall(err)
+  ))
 }
 
 .decode_from_char <- function(x) {
@@ -119,7 +123,11 @@ uns_hint <- function(type = c('1d', '2d')) {
 .read_soma_joinids <- function(x, ...) {
   stopifnot(inherits(x = x, what = 'TileDBArray'))
   oldmode <- x$mode()
-  on.exit(x$reopen(oldmode), add = TRUE, after = FALSE)
+  on.exit(
+    x$reopen(oldmode, tiledb_timestamp = x$tiledb_timestamp),
+    add = TRUE,
+    after = FALSE
+  )
   op <- options(arrow.int64_downcast = FALSE)
   on.exit(options(op), add = TRUE, after = FALSE)
   ids <- UseMethod(generic = '.read_soma_joinids', object = x)
@@ -134,7 +142,7 @@ uns_hint <- function(type = c('1d', '2d')) {
 #' @export
 #'
 .read_soma_joinids.SOMADataFrame <- function(x, ...) {
-  x$reopen("READ")
+  x$reopen("READ", tiledb_timestamp = x$tiledb_timestamp)
   return(x$read(column_names = "soma_joinid")$concat()$GetColumnByName("soma_joinid")$as_vector())
 }
 
@@ -155,15 +163,16 @@ uns_hint <- function(type = c('1d', '2d')) {
   if (axis < 0L || axis >= length(x$dimnames())) {
     stop("'axis' must be between 0 and ", length(x$dimnames()), call. = FALSE)
   }
-  x$reopen("READ")
+  x$reopen("READ", tiledb_timestamp = x$tiledb_timestamp)
   dimname <- x$dimnames()[axis + 1L]
-  rl <- sr_setup(
+  sr <- sr_setup(
     uri = x$uri,
     config = as.character(tiledb::config(x$tiledbsoma_ctx$context())),
+    soma_context(),
     colnames = dimname,
-    timestamp_end = x$.__enclos_env__$private$tiledb_timestamp
+    timestamprange = x$.tiledb_timestamp_range
   )
-  return(TableReadIter$new(rl$sr)$concat()$GetColumnByName(dimname)$as_vector())
+  return(TableReadIter$new(sr)$concat()$GetColumnByName(dimname)$as_vector())
 }
 
 #' Pad Names of a Character Vector

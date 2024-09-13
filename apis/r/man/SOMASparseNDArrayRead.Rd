@@ -29,7 +29,7 @@ Intermediate type to choose result format when reading a sparse array
 \if{html}{\out{<a id="method-SOMASparseNDArrayRead-sparse_matrix"></a>}}
 \if{latex}{\out{\hypertarget{method-SOMASparseNDArrayRead-sparse_matrix}{}}}
 \subsection{Method \code{sparse_matrix()}}{
-Read as a sparse matrix (lifecycle: experimental). Returns
+Read as a sparse matrix (lifecycle: maturing). Returns
 an iterator of Matrix::\link[Matrix]{dgTMatrix-class} or
 \link{matrixZeroBasedView} of it.
 \subsection{Usage}{
@@ -53,7 +53,7 @@ Matrix::\link[Matrix]{dgTMatrix-class}.}
 \if{html}{\out{<a id="method-SOMASparseNDArrayRead-tables"></a>}}
 \if{latex}{\out{\hypertarget{method-SOMASparseNDArrayRead-tables}{}}}
 \subsection{Method \code{tables()}}{
-Read as a arrow::\link[arrow]{Table} (lifecycle: experimental).
+Read as a arrow::\link[arrow]{Table} (lifecycle: maturing).
 Returns an iterator of arrow::\link[arrow]{Table}.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{SOMASparseNDArrayRead$tables()}\if{html}{\out{</div>}}
@@ -73,7 +73,7 @@ Read in a blockwise fashion
   axis,
   ...,
   size = NULL,
-  reindex_disable_on_axis = NULL
+  reindex_disable_on_axis = NA
 )}\if{html}{\out{</div>}}
 }
 
@@ -87,7 +87,14 @@ Read in a blockwise fashion
 \item{\code{size}}{The size of each blockwise chunk to generate}
 
 \item{\code{reindex_disable_on_axis}}{Additional axes that will not be re-indexed;
-currently not yet implemented}
+the following values may be used as shorthands for common settings:
+\itemize{
+\item \dQuote{\code{TRUE}}: disable re-indexing on all axes
+\item \dQuote{\code{NA}}: re-index only on \code{axis}, disable
+re-indexing on all others
+\item \dQuote{\code{FALSE}}: re-index on \emph{all} axes, do \strong{not}
+disable re-indexing
+}}
 }
 \if{html}{\out{</div>}}
 }

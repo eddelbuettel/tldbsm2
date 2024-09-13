@@ -46,27 +46,42 @@ void SOMAExperiment::create(
     std::unique_ptr<ArrowSchema> schema,
     ArrowTable index_columns,
     std::shared_ptr<SOMAContext> ctx,
-    std::optional<PlatformConfig> platform_config,
+    PlatformConfig platform_config,
     std::optional<TimestampRange> timestamp) {
-    std::string exp_uri(uri);
+    try {
+        std::filesystem::path experiment_uri(uri);
 
-    SOMAGroup::create(ctx, exp_uri, "SOMAExperiment", timestamp);
-    SOMADataFrame::create(
-        exp_uri + "/obs",
-        std::move(schema),
-        ArrowTable(
-            std::move(index_columns.first), std::move(index_columns.second)),
-        ctx,
-        platform_config,
-        timestamp);
-    SOMACollection::create(exp_uri + "/ms", ctx, timestamp);
+        SOMAGroup::create(
+            ctx, experiment_uri.string(), "SOMAExperiment", timestamp);
+        SOMADataFrame::create(
+            (experiment_uri / "obs").string(),
+            std::move(schema),
+            ArrowTable(
+                std::move(index_columns.first),
+                std::move(index_columns.second)),
+            ctx,
+            platform_config,
+            timestamp);
+        SOMACollection::create(
+            (experiment_uri / "ms").string(), ctx, timestamp);
 
-    auto name = std::string(std::filesystem::path(uri).filename());
-    auto group = SOMAGroup::open(
-        OpenMode::write, exp_uri, ctx, name, timestamp);
-    group->set(exp_uri + "/obs", URIType::absolute, "obs");
-    group->set(exp_uri + "/ms", URIType::absolute, "ms");
-    group->close();
+        auto name = std::string(std::filesystem::path(uri).filename());
+        auto group = SOMAGroup::open(
+            OpenMode::write, experiment_uri.string(), ctx, name, timestamp);
+        group->set(
+            (experiment_uri / "obs").string(),
+            URIType::absolute,
+            "obs",
+            "SOMADataFrame");
+        group->set(
+            (experiment_uri / "ms").string(),
+            URIType::absolute,
+            "ms",
+            "SOMACollection");
+        group->close();
+    } catch (TileDBError& e) {
+        throw TileDBSOMAError(e.what());
+    }
 }
 
 std::unique_ptr<SOMAExperiment> SOMAExperiment::open(
@@ -74,6 +89,36 @@ std::unique_ptr<SOMAExperiment> SOMAExperiment::open(
     OpenMode mode,
     std::shared_ptr<SOMAContext> ctx,
     std::optional<TimestampRange> timestamp) {
-    return std::make_unique<SOMAExperiment>(mode, uri, ctx, timestamp);
+    try {
+        return std::make_unique<SOMAExperiment>(mode, uri, ctx, timestamp);
+    } catch (TileDBError& e) {
+        throw TileDBSOMAError(e.what());
+    }
 }
+
+std::shared_ptr<SOMADataFrame> SOMAExperiment::obs(
+    std::vector<std::string> column_names, ResultOrder result_order) {
+    if (obs_ == nullptr) {
+        obs_ = SOMADataFrame::open(
+            (std::filesystem::path(uri()) / "obs").string(),
+            OpenMode::read,
+            ctx(),
+            column_names,
+            result_order,
+            timestamp());
+    }
+    return obs_;
+}
+
+std::shared_ptr<SOMACollection> SOMAExperiment::ms() {
+    if (ms_ == nullptr) {
+        ms_ = SOMACollection::open(
+            (std::filesystem::path(uri()) / "ms").string(),
+            OpenMode::read,
+            ctx(),
+            timestamp());
+    }
+    return ms_;
+}
+
 }  // namespace tiledbsoma

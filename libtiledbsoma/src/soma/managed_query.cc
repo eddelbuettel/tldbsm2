@@ -55,9 +55,6 @@ ManagedQuery::ManagedQuery(
 }
 
 void ManagedQuery::close() {
-    if (query_future_.valid()) {
-        query_future_.get();
-    }
     array_->close();
 }
 
@@ -218,6 +215,30 @@ void ManagedQuery::set_column_data(
     }
 }
 
+std::shared_ptr<ColumnBuffer> ManagedQuery::setup_column_data(
+    std::string_view name) {
+    if (this->query_type() != TILEDB_WRITE) {
+        throw TileDBSOMAError("[SOMAArray] array must be opened in write mode");
+    }
+
+    // Create the array_buffer_ as necessary
+    if (buffers_ == nullptr) {
+        buffers_ = std::make_shared<ArrayBuffers>();
+    }
+
+    // Create a ColumnBuffer object instead of passing it in as an argument to
+    // `set_column_data` because ColumnBuffer::create requires a TileDB Array
+    // argument which should remain a private member of SOMAArray
+    auto column = ColumnBuffer::create(array_, name);
+
+    // Keep the ColumnBuffer alive by attaching it to the ArrayBuffers class
+    // member. Otherwise, the data held by the ColumnBuffer will be garbage
+    // collected before it is submitted to the write query
+    buffers_->emplace(std::string(name), column);
+
+    return column;
+};
+
 void ManagedQuery::setup_read() {
     // If the query is complete, return so we do not submit it again
     auto status = query_->query_status();
@@ -250,8 +271,10 @@ void ManagedQuery::setup_read() {
     // If no columns were selected, select all columns.
     // Add dims and attrs in the same order as specified in the schema
     if (columns_.empty()) {
-        for (const auto& dim : array_->schema().domain().dimensions()) {
-            columns_.push_back(dim.name());
+        if (array_->schema().array_type() == TILEDB_SPARSE) {
+            for (const auto& dim : array_->schema().domain().dimensions()) {
+                columns_.push_back(dim.name());
+            }
         }
         int attribute_num = array_->schema().attribute_num();
         for (int i = 0; i < attribute_num; i++) {
@@ -270,17 +293,33 @@ void ManagedQuery::setup_read() {
     }
 }
 
-void ManagedQuery::submit_write() {
-    query_->submit();
-    query_->finalize();
+void ManagedQuery::submit_write(bool sort_coords) {
+    if (array_->schema().array_type() == TILEDB_DENSE) {
+        query_->set_subarray(*subarray_);
+    } else {
+        query_->set_layout(
+            sort_coords ? TILEDB_UNORDERED : TILEDB_GLOBAL_ORDER);
+    }
+
+    if (query_->query_layout() == TILEDB_GLOBAL_ORDER) {
+        query_->submit_and_finalize();
+    } else {
+        query_->submit();
+        query_->finalize();
+    }
 }
 
 void ManagedQuery::submit_read() {
     query_submitted_ = true;
     query_future_ = std::async(std::launch::async, [&]() {
         LOG_DEBUG("[ManagedQuery] submit thread start");
-        query_->submit();
+        try {
+            query_->submit();
+        } catch (const std::exception& e) {
+            return StatusAndException(false, e.what());
+        }
         LOG_DEBUG("[ManagedQuery] submit thread done");
+        return StatusAndException(true, "success");
     });
 }
 
@@ -292,6 +331,17 @@ std::shared_ptr<ArrayBuffers> ManagedQuery::results() {
     if (query_future_.valid()) {
         LOG_DEBUG(fmt::format("[ManagedQuery] [{}] Waiting for query", name_));
         query_future_.wait();
+        LOG_DEBUG(
+            fmt::format("[ManagedQuery] [{}] Done waiting for query", name_));
+
+        auto retval = query_future_.get();
+        if (!retval.succeeded()) {
+            throw TileDBSOMAError(fmt::format(
+                "[ManagedQuery] [{}] Query FAILED: {}",
+                name_,
+                retval.message()));
+        }
+
     } else {
         throw TileDBSOMAError(
             fmt::format("[ManagedQuery] [{}] 'query_future_' invalid", name_));

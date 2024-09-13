@@ -131,6 +131,7 @@ test_that("Metadata", {
   group$create(internal_use_only = "allowed_use")
 
   md <- list(baz = "qux", foo = "bar")
+  group$open("WRITE", internal_use_only = "allowed_use") # but be open for write
   group$set_metadata(md)
 
   # Read all metadata while the group is still open for write
@@ -150,3 +151,12 @@ test_that("Metadata", {
 
   group$close()
 })
+
+# Existence proof test via cached global context
+# soma_context(config = c(vfs.s3.region = "us-west-2"))
+# (grp <- TileDBGroup$new(
+#   uri = 's3://cellxgene-census-public-us-west-2/cell-census/2024-07-01/soma/', 
+#   internal_use_only = 'allowed_use'
+# ))
+# grp$open(mode = 'READ', internal_use_only = 'allowed_use')
+# grp$names()

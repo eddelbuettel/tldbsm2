@@ -5,15 +5,18 @@ MAKEFLAGS += --no-print-directory
 # print help by default
 help:
 
-# install 
+# install
 # -------------------------------------------------------------------
 
-# set default variable values, if non-null
+# Set default variable values, if non-null
+# * build=Debug creates binary artifacts with symbols, e.g. for gdb
+# * cmake_verbose=true creates Makefiles that produce full compile lines when executed
 build ?= Release
+cmake_verbose ?= false
 
 .PHONY: install
 install: clean
-	@./scripts/bld --prefix=${prefix} --tiledb=${tiledb} --build=${build}
+	@./scripts/bld --prefix=${prefix} --tiledb=${tiledb} --build=${build} --cmake-verbose=${cmake_verbose}
 	@TILEDB_PATH=${tiledb} pip install -v -e apis/python
 
 .PHONY: r-build
@@ -30,9 +33,13 @@ update:
 # test
 # -------------------------------------------------------------------
 .PHONY: test
-test: data
+
+test: ctest
+	pytest apis/python/tests
+
+.PHONY: ctest
+ctest: data
 	ctest --test-dir build/libtiledbsoma -C Release --verbose --rerun-failed --output-on-failure
-	pytest apis/python/tests 
 
 .PHONY: data
 data:
@@ -88,7 +95,7 @@ Rules:
 Options:
   build=BUILD_TYPE    Cmake build type = Release|Debug|RelWithDebInfo|Coverage [Release]
   prefix=PREFIX       Install location [${PWD}/dist]
-  tiledb=TILEDB_DIST  Absolute path to custom TileDB build 
+  tiledb=TILEDB_DIST  Absolute path to custom TileDB build
 
 Examples:
   Install Release build
@@ -108,7 +115,7 @@ Examples:
     make update
 
 
-endef 
+endef
 export HELP
 
 .PHONY: help
