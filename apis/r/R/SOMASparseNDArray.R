@@ -46,9 +46,8 @@ SOMASparseNDArray <- R6::R6Class(
         coords <- private$.convert_coords(coords)
       }
 
-      cfg <- as.character(tiledb::config(self$tiledbsoma_ctx$context()))
+      ## not needed anymore  cfg <- as.character(tiledb::config(self$tiledbsoma_ctx$context()))
       sr <- sr_setup(uri = self$uri,
-                     config = cfg, # needed ?
                      private$.soma_context,
                      dim_points = coords,
                      result_order = result_order,
@@ -188,7 +187,7 @@ SOMASparseNDArray <- R6::R6Class(
     #' @description Retrieve number of non-zero elements (lifecycle: maturing)
     #' @return A scalar with the number of non-zero elements
     nnz = function() {
-      nnz(self$uri, config=as.character(tiledb::config(self$tiledbsoma_ctx$context())))
+      nnz(self$uri, private$.soma_context)
     },
 
     #' @description Increases the shape of the array as specfied. Raises an error
@@ -206,8 +205,7 @@ SOMASparseNDArray <- R6::R6Class(
         (bit64::is.integer64(new_shape) && length(new_shape) == self$ndim())
       )
       # Checking slotwise new shape >= old shape, and <= max_shape, is already done in libtiledbsoma
-
-      resize(self$uri, new_shape, config=as.character(tiledb::config(self$tiledbsoma_ctx$context())))
+      resize(self$uri, new_shape, private$.soma_context)
     },
 
     #' @description Allows the array to have a resizeable shape as described in the
@@ -223,8 +221,7 @@ SOMASparseNDArray <- R6::R6Class(
         (bit64::is.integer64(shape) && length(shape) == self$ndim())
       )
       # Checking slotwise new shape >= old shape, and <= max_shape, is already done in libtiledbsoma
-
-      tiledbsoma_upgrade_shape(self$uri, shape, config=as.character(tiledb::config(self$tiledbsoma_ctx$context())))
+      tiledbsoma_upgrade_shape(self$uri, shape, , private$.soma_context)
     }
 
   ),

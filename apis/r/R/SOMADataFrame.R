@@ -191,9 +191,7 @@ SOMADataFrame <- R6::R6Class(
       }
       spdl::debug("[SOMADataFrame$read] calling sr_setup for {} at ({},{})", self$uri,
                   private$tiledb_timestamp[1], private$tiledb_timestamp[2])
-      cfg <- as.character(tiledb::config(self$tiledbsoma_ctx$context()))
       sr <- sr_setup(uri = self$uri,
-                     config = cfg, # needed ?
                      private$.soma_context,
                      colnames = column_names,
                      qc = value_filter,
@@ -358,10 +356,7 @@ SOMADataFrame <- R6::R6Class(
     #' (lifecycle: maturing)
     #' @return Logical
     tiledbsoma_has_upgraded_domain = function() {
-      has_current_domain(
-        self$uri,
-        config=as.character(tiledb::config(self$tiledbsoma_ctx$context()))
-      )
+      has_current_domain(self$uri, private$.soma_context)
     }
 
   ),

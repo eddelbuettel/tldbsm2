@@ -134,8 +134,8 @@ reindex_lookup <- function(idx, kvec) {
 }
 
 #' @noRd
-soma_array_reader_impl <- function(uri, colnames = NULL, qc = NULL, dim_points = NULL, dim_ranges = NULL, batch_size = "auto", result_order = "auto", loglevel = "auto", config = NULL, timestamprange = NULL) {
-    .Call(`_tiledbsoma_soma_array_reader`, uri, colnames, qc, dim_points, dim_ranges, batch_size, result_order, loglevel, config, timestamprange)
+soma_array_reader_impl <- function(uri, ctxxp, colnames = NULL, qc = NULL, dim_points = NULL, dim_ranges = NULL, batch_size = "auto", result_order = "auto", loglevel = "auto", timestamprange = NULL) {
+    .Call(`_tiledbsoma_soma_array_reader`, uri, ctxxp, colnames, qc, dim_points, dim_ranges, batch_size, result_order, loglevel, timestamprange)
 }
 
 #' Set the logging level for the R package and underlying C++ library
@@ -153,8 +153,8 @@ get_column_types <- function(uri, colnames) {
     .Call(`_tiledbsoma_get_column_types`, uri, colnames)
 }
 
-nnz <- function(uri, config = NULL) {
-    .Call(`_tiledbsoma_nnz`, uri, config)
+nnz <- function(uri, ctxxp) {
+    .Call(`_tiledbsoma_nnz`, uri, ctxxp)
 }
 
 #' @noRd
@@ -167,32 +167,32 @@ check_arrow_array_tag <- function(xp) {
     .Call(`_tiledbsoma_check_arrow_array_tag`, xp)
 }
 
-shape <- function(uri, config = NULL) {
-    .Call(`_tiledbsoma_shape`, uri, config)
+shape <- function(uri, ctxxp) {
+    .Call(`_tiledbsoma_shape`, uri, ctxxp)
 }
 
-maxshape <- function(uri, config = NULL) {
-    .Call(`_tiledbsoma_maxshape`, uri, config)
+maxshape <- function(uri, ctxxp) {
+    .Call(`_tiledbsoma_maxshape`, uri, ctxxp)
 }
 
-maybe_soma_joinid_shape <- function(uri, config = NULL) {
-    .Call(`_tiledbsoma_maybe_soma_joinid_shape`, uri, config)
+maybe_soma_joinid_shape <- function(uri, ctxxp) {
+    .Call(`_tiledbsoma_maybe_soma_joinid_shape`, uri, ctxxp)
 }
 
-maybe_soma_joinid_maxshape <- function(uri, config = NULL) {
-    .Call(`_tiledbsoma_maybe_soma_joinid_maxshape`, uri, config)
+maybe_soma_joinid_maxshape <- function(uri, ctxxp) {
+    .Call(`_tiledbsoma_maybe_soma_joinid_maxshape`, uri, ctxxp)
 }
 
-has_current_domain <- function(uri, config = NULL) {
-    .Call(`_tiledbsoma_has_current_domain`, uri, config)
+has_current_domain <- function(uri, ctxxp) {
+    .Call(`_tiledbsoma_has_current_domain`, uri, ctxxp)
 }
 
-resize <- function(uri, new_shape, config = NULL) {
-    invisible(.Call(`_tiledbsoma_resize`, uri, new_shape, config))
+resize <- function(uri, new_shape, ctxxp) {
+    invisible(.Call(`_tiledbsoma_resize`, uri, new_shape, ctxxp))
 }
 
-tiledbsoma_upgrade_shape <- function(uri, new_shape, config = NULL) {
-    invisible(.Call(`_tiledbsoma_tiledbsoma_upgrade_shape`, uri, new_shape, config))
+tiledbsoma_upgrade_shape <- function(uri, new_shape, ctxxp) {
+    invisible(.Call(`_tiledbsoma_tiledbsoma_upgrade_shape`, uri, new_shape, ctxxp))
 }
 
 #' Iterator-Style Access to SOMA Array via SOMAArray
@@ -229,8 +229,8 @@ tiledbsoma_upgrade_shape <- function(uri, new_shape, config = NULL) {
 #' @examples
 #' \dontrun{
 #' uri <- extract_dataset("soma-dataframe-pbmc3k-processed-obs")
-#' ctx <- tiledb::tiledb_ctx()
-#' sr <- sr_setup(uri, config=as.character(tiledb::config(ctx)))
+#' ctxcp <- soma_context()
+#' sr <- sr_setup(uri, ctxxp)
 #' rl <- data.frame()
 #' while (!sr_complete(sr)) {
 #'   dat <- sr_next(sr)
@@ -240,8 +240,8 @@ tiledbsoma_upgrade_shape <- function(uri, new_shape, config = NULL) {
 #' summary(rl)
 #' }
 #' @noRd
-sr_setup <- function(uri, config, ctxxp, colnames = NULL, qc = NULL, dim_points = NULL, dim_ranges = NULL, batch_size = "auto", result_order = "auto", timestamprange = NULL, loglevel = "auto") {
-    .Call(`_tiledbsoma_sr_setup`, uri, config, ctxxp, colnames, qc, dim_points, dim_ranges, batch_size, result_order, timestamprange, loglevel)
+sr_setup <- function(uri, ctxxp, colnames = NULL, qc = NULL, dim_points = NULL, dim_ranges = NULL, batch_size = "auto", result_order = "auto", timestamprange = NULL, loglevel = "auto") {
+    .Call(`_tiledbsoma_sr_setup`, uri, ctxxp, colnames, qc, dim_points, dim_ranges, batch_size, result_order, timestamprange, loglevel)
 }
 
 sr_complete <- function(sr) {
