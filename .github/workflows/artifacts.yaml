@@ -132,7 +132,7 @@ jobs:
           # an 'artifact' is downloadable by clicking on it but has no external URL
           # we use the artifact to pass the tar.gz on to the next step
           - name: "Artifact"
-            uses: actions/upload-artifact@v3
+            uses: actions/upload-artifact@v4
             with:
               name: libtiledbsoma-${{ matrix.ARTIFACT_OS }}-${{ matrix.ARTIFACT_ARCH }}-${{ steps.versubstr.outputs.substring }}-${{ steps.shasubstr.outputs.substring }}.tar.gz
               path: libtiledbsoma-${{ matrix.ARTIFACT_OS }}-${{ matrix.ARTIFACT_ARCH }}-${{ steps.versubstr.outputs.substring }}-${{ steps.shasubstr.outputs.substring }}.tar.gz
